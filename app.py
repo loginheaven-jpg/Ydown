@@ -78,7 +78,8 @@ async def websocket_download(websocket: WebSocket):
                     asyncio.run_coroutine_threadsafe(websocket.send_text(msg), loop)
 
         ydl_opts = {
-            'format': 'bestaudio/best',
+            # 오디오 전용 스트림이 막힌 영상을 대비하여, 비디오+오디오 통합본에서 오디오를 뜯어오도록 다중 Fallback 스트림 설정
+            'format': 'bestaudio/bestvideo+bestaudio/best', # 일부 영상의 오디오 스트림 차단을 우회하기 위해 범용적인 best 다운로드 후 오디오만 추출
             'outtmpl': os.path.join(DOWNLOAD_DIR, '%(title)s.%(ext)s'),
             'progress_hooks': [my_hook],
             'postprocessor_hooks': [pp_hook],
