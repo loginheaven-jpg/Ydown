@@ -20,8 +20,8 @@ COPY . .
 # 다운로드된 파일을 보존할 수 있도록 볼륨 지정 추천 (호스팅 환경에 따라 다름)
 # VOLUME ["/app/downloads"]
 
-# Uvicorn 실행을 위한 포트 개방 (Render.com 기본 지정 포트 10000 사용)
-EXPOSE 10000
+# 서버 구동 포트명시
+EXPOSE 8000
 
-# 서버 실행
-CMD ["uvicorn", "app:app", "--host", "0.0.0.0", "--port", "10000"]
+# 서버 실행 (Python을 통해 직접 실행하면 app.py 내부에서 클라우드 포트를 동적으로 인식함)
+CMD ["python", "app.py"]

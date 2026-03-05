@@ -120,5 +120,9 @@ async def websocket_download(websocket: WebSocket):
             pass
 
 if __name__ == "__main__":
-    # 로컬 실행 시 127.0.0.1을 사용하여 브라우저 직접 접속 호환성 보장
-    uvicorn.run("app:app", host="127.0.0.1", port=8000)
+    # Render 클라우드 환경에서는 0.0.0.0 및 동적 PORT 연결, 로컬에서는 127.0.0.1 사용
+    is_cloud = os.environ.get("RENDER") is not None or "PORT" in os.environ
+    host_ip = "0.0.0.0" if is_cloud else "127.0.0.1"
+    server_port = int(os.environ.get("PORT", 8000))
+    
+    uvicorn.run("app:app", host=host_ip, port=server_port)
