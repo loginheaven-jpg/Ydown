@@ -20,8 +20,8 @@ COPY . .
 # 다운로드된 파일을 보존할 수 있도록 볼륨 지정 추천 (호스팅 환경에 따라 다름)
 # VOLUME ["/app/downloads"]
 
-# Uvicorn 실행을 위한 포트 개방
-EXPOSE 8000
+# Uvicorn 실행을 위한 포트 개방 (Render.com 기본 지정 포트 10000 사용)
+EXPOSE 10000
 
-# 서버 실행 (Render.com에서는 환경변수 PORT를 무조건 수신해야 배포 타임아웃이 발생하지 않음)
-CMD sh -c "uvicorn app:app --host 0.0.0.0 --port ${PORT:-8000}"
+# 서버 실행
+CMD ["uvicorn", "app:app", "--host", "0.0.0.0", "--port", "10000"]
