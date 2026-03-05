@@ -42,8 +42,12 @@ async def get(request: Request):
 
 @app.get("/health")
 async def health():
-    """Render 헬스체크용 엔드포인트"""
-    return JSONResponse({"status": "ok"})
+    """Render 헬스체크용 엔드포인트. WARP 프록시 상태도 표시한다."""
+    warp_proxy = os.environ.get("WARP_PROXY")
+    return JSONResponse({
+        "status": "ok",
+        "warp_proxy": warp_proxy or "disabled",
+    })
 
 @app.get("/stream/{filename:path}")
 async def stream_file(filename: str):
@@ -87,17 +91,23 @@ def build_ydl_opts(audio_format, progress_hook, postprocessor_hook):
             ),
             'Accept-Language': 'ko-KR,ko;q=0.9,en-US;q=0.8,en;q=0.7',
         },
-        # YouTube 봇 감지 우회: ios 클라이언트는 PO token 없이도 클라우드 IP에서 동작
+        # YouTube 봇 감지 우회: web 클라이언트 사용
         'extractor_args': {
             'youtube': {
-                'player_client': ['ios', 'mweb'],
+                'player_client': ['web'],
             }
         },
     }
 
-    # 쿠키 파일이 존재하고 비어있지 않으면 사용
+    # Cloudflare WARP SOCKS5 프록시 연동 (데이터센터 IP 차단 우회)
+    warp_proxy = os.environ.get("WARP_PROXY")
+    if warp_proxy:
+        opts['proxy'] = warp_proxy
+
+    # 쿠키 파일이 존재하고 비어있지 않으면 사용 (로컬 환경 전용)
+    # 주의: 클라우드 IP와 쿠키 생성 IP가 다르면 Google이 세션을 무효화한다.
     cookie_path = "cookies.txt"
-    if os.path.exists(cookie_path) and os.path.getsize(cookie_path) > 100:
+    if not warp_proxy and os.path.exists(cookie_path) and os.path.getsize(cookie_path) > 100:
         opts['cookiefile'] = cookie_path
 
     return opts
@@ -163,9 +173,11 @@ async def websocket_download(websocket: WebSocket):
 
         ydl_opts = build_ydl_opts(audio_format, my_hook, pp_hook)
 
+        warp_status = "🛡️ WARP 프록시 활성" if os.environ.get("WARP_PROXY") else "⚠️ 직접 연결 (로컬 전용)"
         await websocket.send_text(
             f"INFO: 총 {len(valid_urls)}개의 URL 작업을 시작합니다.\n"
-            f"최상음질(320) {audio_format.upper()} 포맷으로 추출합니다."
+            f"최상음질(320) {audio_format.upper()} 포맷으로 추출합니다.\n"
+            f"연결 모드: {warp_status}"
         )
 
         # ===== URL을 개별 처리하여 하나의 실패가 전체를 중단시키지 않도록 한다 =====
