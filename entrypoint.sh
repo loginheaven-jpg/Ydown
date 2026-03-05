@@ -94,4 +94,12 @@ if [ "$WARP_OK" = true ]; then
     echo "[YDown] WARP_PROXY=${WARP_PROXY}"
 fi
 
+# 환경변수로 주입된 YouTube 쿠키를 파일로 기록
+if [ -n "$YOUTUBE_COOKIES" ]; then
+    echo "$YOUTUBE_COOKIES" > /app/cookies.txt
+    echo "[YDown] cookies.txt 생성 완료 ($(wc -c < /app/cookies.txt) bytes)"
+else
+    echo "[YDown] YOUTUBE_COOKIES 환경변수 없음 - 쿠키 없이 실행"
+fi
+
 exec uvicorn app:app --host 0.0.0.0 --port "${PORT:-8000}"
