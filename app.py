@@ -44,9 +44,12 @@ async def get(request: Request):
 async def health():
     """헬스체크용 엔드포인트."""
     warp_proxy = os.environ.get("WARP_PROXY")
+    cookie_path = "cookies.txt"
+    cookie_ok = os.path.exists(cookie_path) and os.path.getsize(cookie_path) > 100
     return JSONResponse({
         "status": "ok",
         "warp_proxy": warp_proxy or "disabled",
+        "cookies": "loaded" if cookie_ok else "missing",
     })
 
 @app.get("/stream/{filename:path}")
