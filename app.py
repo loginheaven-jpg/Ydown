@@ -12,24 +12,19 @@ import yt_dlp
 
 app = FastAPI()
 
-# 템플릿 디렉토리 설정
 templates = Jinja2Templates(directory="templates")
 
-# 다운로드 폴더 자동 생성 및 정적 파일 서빙 설정 (웹 배포시 다운로드 가능하도록)
 DOWNLOAD_DIR = "downloads"
 os.makedirs(DOWNLOAD_DIR, exist_ok=True)
 app.mount("/downloads", StaticFiles(directory=DOWNLOAD_DIR), name="downloads")
 
-# 다운로드 파일 보존 시간 (초). 이보다 오래된 파일은 자동 삭제.
 FILE_TTL_SECONDS = 600  # 10분
 
 def cleanup_old_files():
-    """FILE_TTL_SECONDS 이상 경과한 파일을 downloads 폴더에서 삭제한다."""
     now = time.time()
     for filepath in glob.glob(os.path.join(DOWNLOAD_DIR, "*")):
         if os.path.isfile(filepath):
-            age = now - os.path.getmtime(filepath)
-            if age > FILE_TTL_SECONDS:
+            if now - os.path.getmtime(filepath) > FILE_TTL_SECONDS:
                 try:
                     os.remove(filepath)
                 except OSError:
@@ -37,36 +32,21 @@ def cleanup_old_files():
 
 @app.get("/")
 async def get(request: Request):
-    """메인 페이지 렌더링"""
     return templates.TemplateResponse("index.html", {"request": request})
 
 @app.get("/health")
 async def health():
-    """헬스체크용 엔드포인트."""
-    warp_proxy = os.environ.get("WARP_PROXY")
-    cookie_path = "cookies.txt"
-    cookie_ok = os.path.exists(cookie_path) and os.path.getsize(cookie_path) > 100
-    return JSONResponse({
-        "status": "ok",
-        "warp_proxy": warp_proxy or "disabled",
-        "cookies": "loaded" if cookie_ok else "missing",
-    })
+    return JSONResponse({"status": "ok"})
 
 @app.get("/stream/{filename:path}")
 async def stream_file(filename: str):
-    """다운로드 완료된 파일을 스트리밍 방식으로 전송한다."""
     filepath = os.path.join(DOWNLOAD_DIR, filename)
     if not os.path.exists(filepath):
         return JSONResponse({"error": "파일을 찾을 수 없습니다."}, status_code=404)
-    return FileResponse(
-        filepath,
-        media_type="application/octet-stream",
-        filename=filename,
-    )
+    return FileResponse(filepath, media_type="application/octet-stream", filename=filename)
 
 def build_ydl_opts(audio_format, progress_hook, postprocessor_hook):
-    """yt-dlp 옵션을 구성한다."""
-    opts = {
+    return {
         'format': 'bestaudio/best',
         'outtmpl': os.path.join(DOWNLOAD_DIR, '%(title)s.%(ext)s'),
         'progress_hooks': [progress_hook],
@@ -82,28 +62,10 @@ def build_ydl_opts(audio_format, progress_hook, postprocessor_hook):
         'retries': 3,
         'fragment_retries': 3,
         'socket_timeout': 30,
-        # 클라우드 IP 차단 우회: ios 클라이언트는 PO token 없이 동작
-        'extractor_args': {
-            'youtube': {'player_client': ['ios', 'tv_embedded']}
-        },
     }
-
-    # WARP 프록시 연동 (entrypoint.sh가 설정한 경우)
-    warp_proxy = os.environ.get('WARP_PROXY')
-    if warp_proxy:
-        opts['proxy'] = warp_proxy
-
-    # 쿠키 파일 연동 (YOUTUBE_COOKIES 환경변수로 주입)
-    cookie_path = 'cookies.txt'
-    if os.path.exists(cookie_path) and os.path.getsize(cookie_path) > 100:
-        opts['cookiefile'] = cookie_path
-
-    return opts
-
 
 @app.websocket("/ws/download")
 async def websocket_download(websocket: WebSocket):
-    """웹소켓을 통한 실시간 복수 다운로드 및 진행률 전송"""
     await websocket.accept()
     try:
         data = await websocket.receive_json()
@@ -116,39 +78,30 @@ async def websocket_download(websocket: WebSocket):
             await websocket.close()
             return
 
-        # 작업 시작 전 오래된 파일 정리 (디스크 확보)
         cleanup_old_files()
-
         loop = asyncio.get_running_loop()
 
         def my_hook(d):
-            """yt-dlp 다운로드 진행 상태를 웹소켓으로 전송하는 훅"""
             if d['status'] == 'downloading':
                 percent = d.get('_percent_str', 'N/A').strip()
                 speed = d.get('_speed_str', 'N/A').strip()
                 eta = d.get('_eta_str', 'N/A').strip()
-
                 filename = d.get('filename', '')
                 title = os.path.basename(filename) if filename else "알 수 없음"
-
-                msg = f"PROGRESS: [{title}] 다운로드 중... {percent} (속도: {speed}, 남은 시간: {eta})"
+                msg = f"PROGRESS: [{title}] {percent} (속도: {speed}, 남은 시간: {eta})"
                 asyncio.run_coroutine_threadsafe(websocket.send_text(msg), loop)
-
             elif d['status'] == 'finished':
-                msg = "PROGRESS: 다운로드 완료! 오디오 파일로 변환 중입니다..."
-                asyncio.run_coroutine_threadsafe(websocket.send_text(msg), loop)
+                asyncio.run_coroutine_threadsafe(
+                    websocket.send_text("PROGRESS: 다운로드 완료! 변환 중..."), loop)
 
         def pp_hook(d):
-            """포스트프로세서(FFmpeg 변환) 완료 시 호출되는 훅"""
             if d['status'] == 'finished':
                 info = d.get('info_dict', {})
                 filepath = info.get('filepath')
-
                 if not filepath:
                     original = info.get('_filename', '')
                     if original:
                         filepath = os.path.splitext(original)[0] + f".{audio_format}"
-
                 if filepath and os.path.exists(filepath):
                     filename = os.path.basename(filepath)
                     encoded_filename = urllib.parse.quote(filename)
@@ -158,7 +111,7 @@ async def websocket_download(websocket: WebSocket):
         ydl_opts = build_ydl_opts(audio_format, my_hook, pp_hook)
 
         await websocket.send_text(
-            f"INFO: 총 {len(valid_urls)}개의 URL 작업을 시작합니다.\n"
+            f"INFO: 총 {len(valid_urls)}개의 URL 작업을 시작합니다. "
             f"최상음질(320) {audio_format.upper()} 포맷으로 추출합니다."
         )
 
@@ -180,22 +133,17 @@ async def websocket_download(websocket: WebSocket):
                 success_count += 1
             except yt_dlp.utils.DownloadError as e:
                 fail_count += 1
-                error_msg = str(e)
-                await websocket.send_text(f"ERROR: [{idx}] 다운로드 실패 / 원인: {error_msg[:500]}")
+                await websocket.send_text(f"ERROR: [{idx}] 다운로드 실패 - {str(e)[:300]}")
             except Exception as e:
                 fail_count += 1
                 await websocket.send_text(f"ERROR: [{idx}] 서버 오류 - {str(e)[:200]}")
 
-        # 최종 결과 요약
         if fail_count == 0:
             await websocket.send_text("SUCCESS: 모든 다운로드 및 변환 작업이 완료되었습니다!")
         elif success_count > 0:
-            await websocket.send_text(
-                f"SUCCESS: {success_count}개 성공, {fail_count}개 실패. "
-                f"성공한 파일은 아래에서 다운로드할 수 있습니다."
-            )
+            await websocket.send_text(f"SUCCESS: {success_count}개 성공, {fail_count}개 실패.")
         else:
-            await websocket.send_text("ERROR: 모든 다운로드가 실패했습니다. URL 또는 쿠키를 확인하세요.")
+            await websocket.send_text("ERROR: 모든 다운로드가 실패했습니다.")
 
     except WebSocketDisconnect:
         print("Client disconnected")
@@ -211,8 +159,4 @@ async def websocket_download(websocket: WebSocket):
             pass
 
 if __name__ == "__main__":
-    is_cloud = os.environ.get("RENDER") is not None or "PORT" in os.environ
-    host_ip = "0.0.0.0" if is_cloud else "127.0.0.1"
-    server_port = int(os.environ.get("PORT", 8000))
-
-    uvicorn.run("app:app", host=host_ip, port=server_port)
+    uvicorn.run("app:app", host="127.0.0.1", port=8000)
