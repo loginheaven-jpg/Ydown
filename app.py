@@ -63,9 +63,8 @@ async def stream_file(filename: str):
     )
 
 def build_ydl_opts(audio_format, progress_hook, postprocessor_hook):
-    """yt-dlp 옵션을 구성한다. 클라우드 환경 최적화 포함."""
-    opts = {
-        # 오디오 전용 스트림만 선택. 영상 다운로드를 완전히 회피한다.
+    """yt-dlp 옵션을 구성한다."""
+    return {
         'format': 'bestaudio/best',
         'outtmpl': os.path.join(DOWNLOAD_DIR, '%(title)s.%(ext)s'),
         'progress_hooks': [progress_hook],
@@ -73,34 +72,15 @@ def build_ydl_opts(audio_format, progress_hook, postprocessor_hook):
         'postprocessors': [{
             'key': 'FFmpegExtractAudio',
             'preferredcodec': audio_format,
-            'preferredquality': '320',  # 최상음질(320k) 적용
+            'preferredquality': '320',
         }],
         'quiet': True,
         'noprogress': True,
         'no_warnings': True,
-        # 네트워크 안정성 옵션
         'retries': 3,
         'fragment_retries': 3,
         'socket_timeout': 30,
-        # WARP 프록시가 없을 때 폴백: ios 클라이언트는 PO token 없이도 동작
-        'extractor_args': {
-            'youtube': {
-                'player_client': ['ios', 'tv_embedded'],
-            }
-        },
     }
-
-    # Cloudflare WARP SOCKS5 프록시 연동 (데이터센터 IP 차단 우회)
-    warp_proxy = os.environ.get("WARP_PROXY")
-    if warp_proxy:
-        opts['proxy'] = warp_proxy
-
-    # 쿠키 파일이 존재하고 비어있지 않으면 사용
-    cookie_path = "cookies.txt"
-    if os.path.exists(cookie_path) and os.path.getsize(cookie_path) > 100:
-        opts['cookiefile'] = cookie_path
-
-    return opts
 
 
 @app.websocket("/ws/download")
