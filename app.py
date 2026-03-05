@@ -87,10 +87,10 @@ def build_ydl_opts(audio_format, progress_hook, postprocessor_hook):
             ),
             'Accept-Language': 'ko-KR,ko;q=0.9,en-US;q=0.8,en;q=0.7',
         },
-        # YouTube 봇 감지 우회: web 클라이언트 사용
+        # YouTube 봇 감지 우회: ios 클라이언트는 PO token 없이도 클라우드 IP에서 동작
         'extractor_args': {
             'youtube': {
-                'player_client': ['web'],
+                'player_client': ['ios', 'mweb'],
             }
         },
     }
