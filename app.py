@@ -101,7 +101,7 @@ def build_ydl_opts(audio_format, progress_hook, postprocessor_hook):
 
     # Cloudflare WARP SOCKS5 프록시 연동 (데이터센터 IP 차단 우회)
     warp_proxy = os.environ.get("WARP_PROXY")
-    if warp_proxy:
+    if False:  # WARP 비활성화 테스트
         opts['proxy'] = warp_proxy
 
     # 쿠키 파일이 존재하고 비어있지 않으면 사용
