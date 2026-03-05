@@ -66,7 +66,7 @@ def build_ydl_opts(audio_format, progress_hook, postprocessor_hook):
     """yt-dlp 옵션을 구성한다. 클라우드 환경 최적화 포함."""
     opts = {
         # 오디오 전용 스트림만 선택. 영상 다운로드를 완전히 회피한다.
-        'format': 'bestaudio[ext=webm]/bestaudio[ext=m4a]/bestaudio/best',
+        'format': 'bestaudio/best',
         'outtmpl': os.path.join(DOWNLOAD_DIR, '%(title)s.%(ext)s'),
         'progress_hooks': [progress_hook],
         'postprocessor_hooks': [postprocessor_hook],
