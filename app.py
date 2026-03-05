@@ -42,8 +42,12 @@ async def get(request: Request):
 
 @app.get("/health")
 async def health():
-    """Render 헬스체크용 엔드포인트"""
-    return JSONResponse({"status": "ok"})
+    """Render 헬스체크용 엔드포인트. WARP 프록시 상태도 표시한다."""
+    warp_proxy = os.environ.get("WARP_PROXY")
+    return JSONResponse({
+        "status": "ok",
+        "warp_proxy": warp_proxy or "disabled",
+    })
 
 @app.get("/stream/{filename:path}")
 async def stream_file(filename: str):
@@ -87,13 +91,20 @@ def build_ydl_opts(audio_format, progress_hook, postprocessor_hook):
             ),
             'Accept-Language': 'ko-KR,ko;q=0.9,en-US;q=0.8,en;q=0.7',
         },
-        # YouTube 봇 감지 우회: web 클라이언트 사용
+        # WARP 프록시가 없을 때 폴백: ios 클라이언트는 PO token 없이도 동작
         'extractor_args': {
             'youtube': {
-                'player_client': ['web'],
+                'player_client': ['ios', 'tv_embedded'],
             }
         },
     }
+
+    # Cloudflare WARP SOCKS5 프록시 연동 (데이터센터 IP 차단 우회)
+    warp_proxy = os.environ.get("WARP_PROXY")
+    if warp_proxy:
+        opts['proxy'] = warp_proxy
+        # WARP 사용 시 ios 대신 web 클라이언트로 (주거용 IP처럼 인식됨)
+        opts['extractor_args']['youtube']['player_client'] = ['web']
 
     # 쿠키 파일이 존재하고 비어있지 않으면 사용
     cookie_path = "cookies.txt"
