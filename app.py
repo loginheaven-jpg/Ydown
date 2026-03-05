@@ -103,8 +103,6 @@ def build_ydl_opts(audio_format, progress_hook, postprocessor_hook):
     warp_proxy = os.environ.get("WARP_PROXY")
     if warp_proxy:
         opts['proxy'] = warp_proxy
-        # WARP 사용 시 ios 대신 web 클라이언트로 (주거용 IP처럼 인식됨)
-        opts['extractor_args']['youtube']['player_client'] = ['web']
 
     # 쿠키 파일이 존재하고 비어있지 않으면 사용
     cookie_path = "cookies.txt"
