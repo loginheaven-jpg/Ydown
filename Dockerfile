@@ -23,5 +23,5 @@ COPY . .
 # Uvicorn 실행을 위한 포트 개방
 EXPOSE 8000
 
-# 서버 실행 (클라우드 환경에서는 PORT 환경변수가 보통 주어지므로 호스트 0.0.0.0 바인딩 필수)
-CMD ["uvicorn", "app:app", "--host", "0.0.0.0", "--port", "8000"]
+# 서버 실행 (Render.com에서는 환경변수 PORT를 무조건 수신해야 배포 타임아웃이 발생하지 않음)
+CMD sh -c "uvicorn app:app --host 0.0.0.0 --port ${PORT:-8000}"
