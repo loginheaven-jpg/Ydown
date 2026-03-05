@@ -1,0 +1,501 @@
+<!DOCTYPE html>
+<html lang="ko">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>YDown - 클라우드 오디오 추출기</title>
+    <!-- 불필요한 파비콘 요청(404 에러) 방지 -->
+    <link rel="icon" href="data:,">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg-color: #0f172a;
+            --surface-color: rgba(30, 41, 59, 0.7);
+            --primary-color: #3b82f6;
+            --primary-hover: #2563eb;
+            --text-main: #f8fafc;
+            --text-muted: #94a3b8;
+            --border-color: rgba(255, 255, 255, 0.1);
+            --success-color: #10b981;
+            --error-color: #ef4444;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            font-family: 'Inter', sans-serif;
+        }
+
+        body {
+            background-color: var(--bg-color);
+            color: var(--text-main);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background-image:
+                radial-gradient(at 0% 0%, rgba(59, 130, 246, 0.15) 0px, transparent 50%),
+                radial-gradient(at 100% 100%, rgba(139, 92, 246, 0.15) 0px, transparent 50%);
+            padding: 2rem;
+        }
+
+        .container {
+            width: 100%;
+            max-width: 600px;
+            background: var(--surface-color);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            border: 1px solid var(--border-color);
+            border-radius: 20px;
+            padding: 2.5rem;
+            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+            max-height: 90vh;
+            overflow-y: auto;
+        }
+
+        /* 크롬 등 스크롤바 디자인 */
+        .container::-webkit-scrollbar {
+            width: 8px;
+        }
+
+        .container::-webkit-scrollbar-track {
+            background: rgba(0, 0, 0, 0.1);
+            border-radius: 10px;
+        }
+
+        .container::-webkit-scrollbar-thumb {
+            background: rgba(255, 255, 255, 0.2);
+            border-radius: 10px;
+        }
+
+        .header {
+            text-align: center;
+            margin-bottom: 2rem;
+        }
+
+        .header h1 {
+            font-size: 1.8rem;
+            font-weight: 700;
+            background: linear-gradient(135deg, #60a5fa, #a78bfa);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            margin-bottom: 0.5rem;
+        }
+
+        .header p {
+            color: var(--text-muted);
+            font-size: 0.95rem;
+        }
+
+        .form-group {
+            margin-bottom: 1.5rem;
+        }
+
+        .url-list input {
+            margin-bottom: 0.5rem;
+        }
+
+        .url-list input:last-child {
+            margin-bottom: 0;
+        }
+
+        label {
+            display: flex;
+            justify-content: space-between;
+            font-size: 0.9rem;
+            font-weight: 500;
+            margin-bottom: 0.5rem;
+            color: var(--text-muted);
+        }
+
+        input[type="text"],
+        select {
+            width: 100%;
+            padding: 0.8rem 1rem;
+            background: rgba(15, 23, 42, 0.6);
+            border: 1px solid var(--border-color);
+            border-radius: 10px;
+            color: var(--text-main);
+            font-size: 0.95rem;
+            transition: all 0.3s ease;
+            outline: none;
+        }
+
+        input[type="text"]:focus,
+        select:focus {
+            border-color: var(--primary-color);
+            box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.2);
+        }
+
+        select {
+            cursor: pointer;
+            appearance: none;
+            background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24' fill='none' stroke='%2394a3b8' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E");
+            background-repeat: no-repeat;
+            background-position: right 1rem center;
+            background-size: 1em;
+        }
+
+        option {
+            background-color: var(--bg-color);
+            color: var(--text-main);
+        }
+
+        .btn {
+            width: 100%;
+            padding: 1rem;
+            background-color: var(--primary-color);
+            color: white;
+            border: none;
+            border-radius: 10px;
+            font-size: 1rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 0.5rem;
+        }
+
+        .btn:hover:not(:disabled) {
+            background-color: var(--primary-hover);
+            transform: translateY(-2px);
+            box-shadow: 0 10px 15px -3px rgba(59, 130, 246, 0.3);
+        }
+
+        .btn:disabled {
+            background-color: #475569;
+            cursor: not-allowed;
+            opacity: 0.7;
+            transform: none;
+            box-shadow: none;
+        }
+
+        .status-container {
+            margin-top: 1.5rem;
+            background: rgba(0, 0, 0, 0.2);
+            border-radius: 10px;
+            border: 1px dashed var(--border-color);
+            overflow: hidden;
+            transition: all 0.3s;
+        }
+
+        .status-header {
+            padding: 0.75rem 1rem;
+            background: rgba(255, 255, 255, 0.05);
+            font-size: 0.85rem;
+            font-weight: 600;
+            color: var(--text-muted);
+            border-bottom: 1px solid var(--border-color);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .status-box {
+            padding: 1rem;
+            min-height: 60px;
+            max-height: 150px;
+            overflow-y: auto;
+            font-family: monospace;
+            font-size: 0.85rem;
+            color: var(--text-muted);
+            line-height: 1.6;
+            white-space: pre-wrap;
+            word-wrap: break-word;
+            text-align: left;
+        }
+
+        .status-container.active {
+            border-color: var(--primary-color);
+        }
+
+        .status-container.success {
+            border-color: var(--success-color);
+        }
+
+        .status-container.error {
+            border-color: var(--error-color);
+        }
+
+        .status-box::-webkit-scrollbar {
+            width: 6px;
+        }
+
+        .status-box::-webkit-scrollbar-thumb {
+            background: rgba(255, 255, 255, 0.2);
+            border-radius: 10px;
+        }
+
+        /* 다운로드 파일 리스트 UI */
+        .download-links {
+            padding: 0.5rem 1rem 1rem 1rem;
+            display: none;
+            flex-direction: column;
+            gap: 0.5rem;
+        }
+
+        .download-links.has-items {
+            display: flex;
+        }
+
+        .file-link {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            background: rgba(16, 185, 129, 0.15);
+            border: 1px solid rgba(16, 185, 129, 0.3);
+            padding: 0.75rem;
+            border-radius: 8px;
+            color: var(--text-main);
+            text-decoration: none;
+            font-size: 0.9rem;
+            transition: all 0.2s;
+        }
+
+        .file-link:hover {
+            background: rgba(16, 185, 129, 0.25);
+            transform: translateX(4px);
+        }
+
+        .file-link svg {
+            width: 18px;
+            height: 18px;
+            color: var(--success-color);
+        }
+
+        /* Spinner */
+        .spinner {
+            display: none;
+            width: 20px;
+            height: 20px;
+            border: 3px solid rgba(255, 255, 255, 0.3);
+            border-radius: 50%;
+            border-top-color: white;
+            animation: spin 1s ease-in-out infinite;
+        }
+
+        @keyframes spin {
+            to {
+                transform: rotate(360deg);
+            }
+        }
+
+        .btn.loading .spinner {
+            display: block;
+        }
+
+        .btn.loading span {
+            display: none;
+        }
+    </style>
+</head>
+
+<body>
+
+    <div class="container">
+        <div class="header">
+            <h1>YDown Audio</h1>
+            <p>최상음질 오디오 추출기 (Max Quality)</p>
+        </div>
+
+        <div class="form-group url-list" id="urlListGroup">
+            <label>
+                <span>YouTube URLs</span>
+                <span style="font-size: 0.75rem; color: var(--primary-color);">최대 10개 순차 다운로드</span>
+            </label>
+            <!-- 10개의 입력 박스 -->
+            <input type="text" class="url-input" placeholder="1. https://youtu.be/..." autocomplete="off">
+            <input type="text" class="url-input" placeholder="2. https://youtu.be/..." autocomplete="off">
+            <input type="text" class="url-input" placeholder="3. https://youtu.be/..." autocomplete="off">
+            <input type="text" class="url-input" placeholder="4. https://youtu.be/..." autocomplete="off">
+            <input type="text" class="url-input" placeholder="5. https://youtu.be/..." autocomplete="off">
+            <input type="text" class="url-input" placeholder="6. https://youtu.be/..." autocomplete="off">
+            <input type="text" class="url-input" placeholder="7. https://youtu.be/..." autocomplete="off">
+            <input type="text" class="url-input" placeholder="8. https://youtu.be/..." autocomplete="off">
+            <input type="text" class="url-input" placeholder="9. https://youtu.be/..." autocomplete="off">
+            <input type="text" class="url-input" placeholder="10. https://youtu.be/..." autocomplete="off">
+        </div>
+
+        <div class="form-group">
+            <label for="formatSelect">오디오 포맷 (320kbps 최상음질 적용)</label>
+            <select id="formatSelect">
+                <option value="mp3">MP3 (호환성 최우선)</option>
+                <option value="m4a">M4A (애플 기기 최적화)</option>
+                <option value="opus">Opus (최고 효율 및 음질)</option>
+            </select>
+        </div>
+
+        <button id="downloadBtn" class="btn" onclick="startDownload()">
+            <div class="spinner"></div>
+            <span>순차 다운로드 시작</span>
+        </button>
+
+        <div class="status-container" id="statusContainer">
+            <div class="status-header">
+                <span id="statusHeaderTitle">대기 중</span>
+                <button onclick="clearLogs()"
+                    style="background:none; border:none; color:inherit; cursor:pointer; font-size: 0.8rem; text-decoration:underline;">로그
+                    지우기</button>
+            </div>
+            <div id="statusBox" class="status-box">URL을 1개 이상 입력하고 다운로드를 시작하세요.</div>
+            <div id="downloadLinks" class="download-links">
+                <!-- 파일 다운로드 링크가 여기에 생성됩니다 -->
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let ws = null;
+
+        function startDownload() {
+            const inputs = document.querySelectorAll('.url-input');
+            const urls = Array.from(inputs).map(input => input.value.trim()).filter(val => val !== "");
+
+            if (urls.length === 0) {
+                appendLog("ERROR: 최소 한 개의 YouTube URL을 입력해주세요.", "error");
+                inputs[0].focus();
+                return;
+            }
+
+            const formatSelect = document.getElementById('formatSelect');
+            const downloadBtn = document.getElementById('downloadBtn');
+            const statusContainer = document.getElementById('statusContainer');
+            const downloadLinks = document.getElementById('downloadLinks');
+
+            // UI 잠금
+            inputs.forEach(input => input.disabled = true);
+            formatSelect.disabled = true;
+            downloadBtn.disabled = true;
+            downloadBtn.classList.add('loading');
+
+            clearLogs();
+            downloadLinks.innerHTML = '';
+            downloadLinks.classList.remove('has-items');
+            updateContainerStatus('active', "처리 중...");
+
+            // 웹소켓 연결 (https 배포 시 wss 사용)
+            const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+            const wsUrl = `${protocol}//${window.location.host}/ws/download`;
+            ws = new WebSocket(wsUrl);
+
+            ws.onopen = () => {
+                ws.send(JSON.stringify({
+                    urls: urls,
+                    format: formatSelect.value
+                }));
+            };
+
+            ws.onmessage = (event) => {
+                const msg = event.data;
+
+                if (msg.startsWith("FILE_READY:")) {
+                    // 서버 추출 완료된 파일을 클라이언트로 다운로드 할 수 있게 링크 생성
+                    const parts = msg.split(":");
+                    const encodedName = parts[1];
+                    const displayName = parts.slice(2).join(":"); // 파일명 내의 : 처리
+                    addDownloadLink(encodedName, displayName);
+                }
+                else if (msg.startsWith("PROGRESS:") || msg.startsWith("INFO:")) {
+                    appendLog(msg, 'active');
+                } else if (msg.startsWith("SUCCESS:")) {
+                    appendLog(msg.replace("SUCCESS:", "✅ 성공:"), 'success');
+                    updateContainerStatus('success', "작업 완료");
+                    resetUI();
+                } else if (msg.startsWith("ERROR:")) {
+                    appendLog(msg.replace("ERROR:", "❌ 오류:"), 'error');
+                    updateContainerStatus('error', "에러 발생");
+                    resetUI();
+                } else {
+                    appendLog(msg, 'active');
+                }
+            };
+
+            ws.onerror = (error) => {
+                appendLog("❌ 서버와의 연결이 끊어지거나 연결할 수 없습니다.", 'error');
+                updateContainerStatus('error', "연결 오류");
+                resetUI();
+            };
+
+            ws.onclose = () => {
+                resetUI();
+            };
+        }
+
+        function appendLog(message, type) {
+            const box = document.getElementById('statusBox');
+            if (box.textContent === "URL을 1개 이상 입력하고 다운로드를 시작하세요.") {
+                box.textContent = "";
+            }
+
+            const line = document.createElement('div');
+            line.textContent = message;
+            if (type === 'error') line.style.color = 'var(--error-color)';
+            if (type === 'success') line.style.color = 'var(--success-color)';
+
+            box.appendChild(line);
+            box.scrollTop = box.scrollHeight; // 자동 스크롤
+        }
+
+        function clearLogs() {
+            document.getElementById('statusBox').textContent = "";
+        }
+
+        function updateContainerStatus(type, text) {
+            const container = document.getElementById('statusContainer');
+            const header = document.getElementById('statusHeaderTitle');
+
+            container.className = 'status-container ' + type;
+            header.textContent = text;
+            if (type === 'success') header.style.color = 'var(--success-color)';
+            else if (type === 'error') header.style.color = 'var(--error-color)';
+            else header.style.color = 'var(--primary-color)';
+        }
+
+        function addDownloadLink(encodedName, displayName) {
+            const linksContainer = document.getElementById('downloadLinks');
+            const fileUrl = `/stream/${encodedName}`;
+
+            const a = document.createElement('a');
+            a.href = fileUrl;
+            a.download = displayName; // 브라우저 다운로드 속성 강제
+            a.className = 'file-link';
+            a.innerHTML = `
+                <span style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 85%;">
+                    🎵 ${displayName}
+                </span>
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                    <polyline points="7 10 12 15 17 10"></polyline>
+                    <line x1="12" y1="15" x2="12" y2="3"></line>
+                </svg>
+            `;
+
+            linksContainer.appendChild(a);
+            linksContainer.classList.add('has-items');
+
+            // 자동 다운로드 트리거 (선택적 기능)
+            // setTimeout(() => a.click(), 500);
+        }
+
+        function resetUI() {
+            const inputs = document.querySelectorAll('.url-input');
+            const formatSelect = document.getElementById('formatSelect');
+            const downloadBtn = document.getElementById('downloadBtn');
+
+            inputs.forEach(input => input.disabled = false);
+            formatSelect.disabled = false;
+            downloadBtn.disabled = false;
+            downloadBtn.classList.remove('loading');
+
+            if (ws && ws.readyState === WebSocket.OPEN) {
+                ws.close();
+            }
+        }
+    </script>
+</body>
+
+</html>

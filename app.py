@@ -1,9 +1,12 @@
 import asyncio
 import os
+import time
+import glob
 import urllib.parse
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Request
 from fastapi.templating import Jinja2Templates
 from fastapi.staticfiles import StaticFiles
+from fastapi.responses import FileResponse, JSONResponse
 import uvicorn
 import yt_dlp
 
@@ -17,10 +20,88 @@ DOWNLOAD_DIR = "downloads"
 os.makedirs(DOWNLOAD_DIR, exist_ok=True)
 app.mount("/downloads", StaticFiles(directory=DOWNLOAD_DIR), name="downloads")
 
+# 다운로드 파일 보존 시간 (초). 이보다 오래된 파일은 자동 삭제.
+FILE_TTL_SECONDS = 600  # 10분
+
+def cleanup_old_files():
+    """FILE_TTL_SECONDS 이상 경과한 파일을 downloads 폴더에서 삭제한다."""
+    now = time.time()
+    for filepath in glob.glob(os.path.join(DOWNLOAD_DIR, "*")):
+        if os.path.isfile(filepath):
+            age = now - os.path.getmtime(filepath)
+            if age > FILE_TTL_SECONDS:
+                try:
+                    os.remove(filepath)
+                except OSError:
+                    pass
+
 @app.get("/")
 async def get(request: Request):
     """메인 페이지 렌더링"""
     return templates.TemplateResponse("index.html", {"request": request})
+
+@app.get("/health")
+async def health():
+    """Render 헬스체크용 엔드포인트"""
+    return JSONResponse({"status": "ok"})
+
+@app.get("/stream/{filename:path}")
+async def stream_file(filename: str):
+    """다운로드 완료된 파일을 스트리밍 방식으로 전송한다.
+    StaticFiles 서빙이 실패할 경우의 대체 경로."""
+    filepath = os.path.join(DOWNLOAD_DIR, filename)
+    if not os.path.exists(filepath):
+        return JSONResponse({"error": "파일을 찾을 수 없습니다."}, status_code=404)
+    return FileResponse(
+        filepath,
+        media_type="application/octet-stream",
+        filename=filename,
+    )
+
+def build_ydl_opts(audio_format, progress_hook, postprocessor_hook):
+    """yt-dlp 옵션을 구성한다. 클라우드 환경 최적화 포함."""
+    opts = {
+        # 오디오 전용 스트림만 선택. 영상 다운로드를 완전히 회피한다.
+        'format': 'bestaudio[ext=webm]/bestaudio[ext=m4a]/bestaudio/best',
+        'outtmpl': os.path.join(DOWNLOAD_DIR, '%(title)s.%(ext)s'),
+        'progress_hooks': [progress_hook],
+        'postprocessor_hooks': [postprocessor_hook],
+        'postprocessors': [{
+            'key': 'FFmpegExtractAudio',
+            'preferredcodec': audio_format,
+            'preferredquality': '320',  # 최상음질(320k) 적용
+        }],
+        'quiet': True,
+        'noprogress': True,
+        'no_warnings': True,
+        # 네트워크 안정성 옵션
+        'retries': 3,
+        'fragment_retries': 3,
+        'socket_timeout': 30,
+        # 클라우드 IP 차단 우회를 위한 HTTP 헤더
+        'http_headers': {
+            'User-Agent': (
+                'Mozilla/5.0 (Windows NT 10.0; Win64; x64) '
+                'AppleWebKit/537.36 (KHTML, like Gecko) '
+                'Chrome/131.0.0.0 Safari/537.36'
+            ),
+            'Accept-Language': 'ko-KR,ko;q=0.9,en-US;q=0.8,en;q=0.7',
+        },
+        # YouTube 봇 감지 우회: web 클라이언트 사용
+        'extractor_args': {
+            'youtube': {
+                'player_client': ['web'],
+            }
+        },
+    }
+
+    # 쿠키 파일이 존재하고 비어있지 않으면 사용
+    cookie_path = "cookies.txt"
+    if os.path.exists(cookie_path) and os.path.getsize(cookie_path) > 100:
+        opts['cookiefile'] = cookie_path
+
+    return opts
+
 
 @app.websocket("/ws/download")
 async def websocket_download(websocket: WebSocket):
@@ -36,6 +117,9 @@ async def websocket_download(websocket: WebSocket):
             await websocket.send_text("ERROR: 최소 한 개의 URL을 입력해주세요.")
             await websocket.close()
             return
+
+        # 작업 시작 전 오래된 파일 정리 (디스크 확보)
+        cleanup_old_files()
 
         loop = asyncio.get_running_loop()
 
@@ -77,47 +161,77 @@ async def websocket_download(websocket: WebSocket):
                     msg = f"FILE_READY:{encoded_filename}:{filename}"
                     asyncio.run_coroutine_threadsafe(websocket.send_text(msg), loop)
 
-        ydl_opts = {
-            # 오디오 전용 스트림이 막힌 영상을 대비하여, 비디오+오디오 통합본에서 오디오를 뜯어오도록 다중 Fallback 스트림 설정
-            'format': 'bestaudio/bestvideo+bestaudio/best', # 일부 영상의 오디오 스트림 차단을 우회하기 위해 범용적인 best 다운로드 후 오디오만 추출
-            'outtmpl': os.path.join(DOWNLOAD_DIR, '%(title)s.%(ext)s'),
-            'progress_hooks': [my_hook],
-            'postprocessor_hooks': [pp_hook],
-            'postprocessors': [{
-                'key': 'FFmpegExtractAudio',
-                'preferredcodec': audio_format,
-                'preferredquality': '320', # 최상음질(320k) 적용
-            }],
-            'quiet': True,
-            'noprogress': True
-        }
-        
-        # 유튜브 봇 감지 완전 우회를 위한 쿠키 파일 연동
-        if os.path.exists("cookies.txt"):
-            ydl_opts['cookiefile'] = "cookies.txt"
-        
-        def run_yt_dlp():
-            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-                # 리스트로 전달된 URL들을 순차적으로 다운로드
-                ydl.download(valid_urls)
+        ydl_opts = build_ydl_opts(audio_format, my_hook, pp_hook)
 
-        await websocket.send_text(f"INFO: 총 {len(valid_urls)}개의 URL 작업을 시작합니다.\n최상음질(320) 포맷으로 추출합니다.")
-        
-        # yt-dlp는 동기 블로킹 함수이므로 스레드에서 실행
-        await asyncio.to_thread(run_yt_dlp)
-        
-        await websocket.send_text("SUCCESS: 모든 다운로드 및 변환 작업이 완료되었습니다!")
+        await websocket.send_text(
+            f"INFO: 총 {len(valid_urls)}개의 URL 작업을 시작합니다.\n"
+            f"최상음질(320) {audio_format.upper()} 포맷으로 추출합니다."
+        )
+
+        # ===== URL을 개별 처리하여 하나의 실패가 전체를 중단시키지 않도록 한다 =====
+        success_count = 0
+        fail_count = 0
+
+        for idx, url in enumerate(valid_urls, 1):
+            # 각 URL 처리 전 heartbeat (WebSocket 타임아웃 방지)
+            try:
+                await websocket.send_text(f"INFO: [{idx}/{len(valid_urls)}] 작업 시작: {url}")
+            except Exception:
+                # WebSocket이 이미 닫힌 경우 중단
+                return
+
+            def run_single_download(target_url):
+                with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                    ydl.download([target_url])
+
+            try:
+                await asyncio.to_thread(run_single_download, url)
+                success_count += 1
+            except yt_dlp.utils.DownloadError as e:
+                fail_count += 1
+                error_msg = str(e)
+                # 흔한 에러 유형별 한국어 안내
+                if "Sign in" in error_msg or "bot" in error_msg.lower():
+                    await websocket.send_text(
+                        f"ERROR: [{idx}] YouTube 봇 감지로 차단되었습니다. "
+                        f"cookies.txt를 갱신하거나 잠시 후 재시도하세요."
+                    )
+                elif "Video unavailable" in error_msg or "Private video" in error_msg:
+                    await websocket.send_text(
+                        f"ERROR: [{idx}] 비공개이거나 삭제된 영상입니다."
+                    )
+                elif "age" in error_msg.lower():
+                    await websocket.send_text(
+                        f"ERROR: [{idx}] 연령 제한 영상입니다. 쿠키 로그인이 필요합니다."
+                    )
+                else:
+                    await websocket.send_text(f"ERROR: [{idx}] 다운로드 실패 - {error_msg[:200]}")
+            except Exception as e:
+                fail_count += 1
+                await websocket.send_text(f"ERROR: [{idx}] 서버 오류 - {str(e)[:200]}")
+
+        # 최종 결과 요약
+        if fail_count == 0:
+            await websocket.send_text("SUCCESS: 모든 다운로드 및 변환 작업이 완료되었습니다!")
+        elif success_count > 0:
+            await websocket.send_text(
+                f"SUCCESS: {success_count}개 성공, {fail_count}개 실패. "
+                f"성공한 파일은 아래에서 다운로드할 수 있습니다."
+            )
+        else:
+            await websocket.send_text("ERROR: 모든 다운로드가 실패했습니다. URL 또는 쿠키를 확인하세요.")
         
     except WebSocketDisconnect:
         print("Client disconnected")
-    except yt_dlp.utils.DownloadError as e:
-        await websocket.send_text(f"ERROR: 다운로드 실패 - {str(e)}")
     except Exception as e:
-        await websocket.send_text(f"ERROR: 서버 오류 - {str(e)}")
+        try:
+            await websocket.send_text(f"ERROR: 서버 오류 - {str(e)}")
+        except Exception:
+            pass
     finally:
         try:
             await websocket.close()
-        except:
+        except Exception:
             pass
 
 if __name__ == "__main__":
