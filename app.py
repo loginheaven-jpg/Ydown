@@ -87,7 +87,6 @@ async def websocket_download(websocket: WebSocket):
                 'preferredcodec': audio_format,
                 'preferredquality': '320', # 최상음질(320k) 적용
             }],
-            'extractor_args': {'youtube': ['player_client=android']}, # 모바일 기기 우회로 봇 감지 회피 시도
             'quiet': True,
             'noprogress': True
         }
