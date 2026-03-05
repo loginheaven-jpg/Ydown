@@ -201,8 +201,7 @@ async def websocket_download(websocket: WebSocket):
             except yt_dlp.utils.DownloadError as e:
                 fail_count += 1
                 error_msg = str(e)
-                await websocket.send_text(f"ERROR: [{idx}] 다운로드 실패
-원인: {error_msg[:500]}")
+                await websocket.send_text(f"ERROR: [{idx}] 다운로드 실패 / 원인: {error_msg[:500]}")
             except Exception as e:
                 fail_count += 1
                 await websocket.send_text(f"ERROR: [{idx}] 서버 오류 - {str(e)[:200]}")
