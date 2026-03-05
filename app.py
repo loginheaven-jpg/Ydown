@@ -82,15 +82,6 @@ def build_ydl_opts(audio_format, progress_hook, postprocessor_hook):
         'retries': 3,
         'fragment_retries': 3,
         'socket_timeout': 30,
-        # 클라우드 IP 차단 우회를 위한 HTTP 헤더
-        'http_headers': {
-            'User-Agent': (
-                'Mozilla/5.0 (Windows NT 10.0; Win64; x64) '
-                'AppleWebKit/537.36 (KHTML, like Gecko) '
-                'Chrome/131.0.0.0 Safari/537.36'
-            ),
-            'Accept-Language': 'ko-KR,ko;q=0.9,en-US;q=0.8,en;q=0.7',
-        },
         # WARP 프록시가 없을 때 폴백: ios 클라이언트는 PO token 없이도 동작
         'extractor_args': {
             'youtube': {
