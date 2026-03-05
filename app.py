@@ -201,22 +201,8 @@ async def websocket_download(websocket: WebSocket):
             except yt_dlp.utils.DownloadError as e:
                 fail_count += 1
                 error_msg = str(e)
-                # 흔한 에러 유형별 한국어 안내
-                if "Sign in" in error_msg or "bot" in error_msg.lower():
-                    await websocket.send_text(
-                        f"ERROR: [{idx}] YouTube 봇 감지로 차단되었습니다. "
-                        f"cookies.txt를 갱신하거나 잠시 후 재시도하세요."
-                    )
-                elif "Video unavailable" in error_msg or "Private video" in error_msg:
-                    await websocket.send_text(
-                        f"ERROR: [{idx}] 비공개이거나 삭제된 영상입니다."
-                    )
-                elif "age" in error_msg.lower():
-                    await websocket.send_text(
-                        f"ERROR: [{idx}] 연령 제한 영상입니다. 쿠키 로그인이 필요합니다."
-                    )
-                else:
-                    await websocket.send_text(f"ERROR: [{idx}] 다운로드 실패 - {error_msg[:200]}")
+                await websocket.send_text(f"ERROR: [{idx}] 다운로드 실패
+원인: {error_msg[:500]}")
             except Exception as e:
                 fail_count += 1
                 await websocket.send_text(f"ERROR: [{idx}] 서버 오류 - {str(e)[:200]}")
