@@ -87,9 +87,14 @@ async def websocket_download(websocket: WebSocket):
                 'preferredcodec': audio_format,
                 'preferredquality': '320', # 최상음질(320k) 적용
             }],
+            'extractor_args': {'youtube': ['player_client=android']}, # 모바일 기기 우회로 봇 감지 회피 시도
             'quiet': True,
             'noprogress': True
         }
+        
+        # 유튜브 봇 감지 완전 우회를 위한 쿠키 파일 연동
+        if os.path.exists("cookies.txt"):
+            ydl_opts['cookiefile'] = "cookies.txt"
         
         def run_yt_dlp():
             with yt_dlp.YoutubeDL(ydl_opts) as ydl:
@@ -116,4 +121,5 @@ async def websocket_download(websocket: WebSocket):
             pass
 
 if __name__ == "__main__":
-    uvicorn.run("app:app", host="0.0.0.0", port=8000)
+    # 로컬 실행 시 127.0.0.1을 사용하여 브라우저 직접 접속 호환성 보장
+    uvicorn.run("app:app", host="127.0.0.1", port=8000)
