@@ -459,26 +459,19 @@
             const linksContainer = document.getElementById('downloadLinks');
             const fileUrl = `/downloads/${encodedName}`;
 
-            const a = document.createElement('a');
-            a.href = fileUrl;
-            a.download = displayName; // 브라우저 다운로드 속성 강제
-            a.className = 'file-link';
-            a.innerHTML = `
-                <span style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 85%;">
-                    🎵 ${displayName}
-                </span>
-                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
-                    <polyline points="7 10 12 15 17 10"></polyline>
-                    <line x1="12" y1="15" x2="12" y2="3"></line>
-                </svg>
-            `;
-
-            linksContainer.appendChild(a);
+            // 완료 라벨 표시
+            const div = document.createElement('div');
+            div.className = 'file-link';
+            div.innerHTML = `<span>✅ ${displayName}</span>`;
+            linksContainer.appendChild(div);
             linksContainer.classList.add('has-items');
 
             // 자동 다운로드
-            setTimeout(() => a.click(), 500);
+            const a = document.createElement('a');
+            a.href = fileUrl;
+            a.download = displayName;
+            document.body.appendChild(a);
+            setTimeout(() => { a.click(); document.body.removeChild(a); }, 500);
         }
 
         function resetUI() {
