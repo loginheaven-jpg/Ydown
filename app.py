@@ -104,9 +104,11 @@ async def websocket_download(websocket: WebSocket):
                         filepath = os.path.splitext(original)[0] + f".{audio_format}"
                 if filepath and os.path.exists(filepath):
                     filename = os.path.basename(filepath)
-                    encoded_filename = urllib.parse.quote(filename)
-                    msg = f"FILE_READY:{encoded_filename}:{filename}"
-                    asyncio.run_coroutine_threadsafe(websocket.send_text(msg), loop)
+                    # 최종 변환 파일(선택한 포맷)만 전송, 중간 파일 제외
+                    if filename.endswith(f".{audio_format}"):
+                        encoded_filename = urllib.parse.quote(filename)
+                        msg = f"FILE_READY:{encoded_filename}:{filename}"
+                        asyncio.run_coroutine_threadsafe(websocket.send_text(msg), loop)
 
         ydl_opts = build_ydl_opts(audio_format, my_hook, pp_hook)
 
