@@ -139,6 +139,23 @@ def test_busy_server_rejects_new_work(client):
         assert "다른 작업" in ws.receive_text()
 
 
+def test_source_authentication_failure_offers_local_app(client, monkeypatch):
+    class BlockedDownloader(FakeDownloader):
+        def extract_info(self, url, download):
+            raise module.yt_dlp.utils.DownloadError("Sign in to confirm you're not a bot. Use --cookies")
+    monkeypatch.setattr(module.yt_dlp, "YoutubeDL", BlockedDownloader)
+    with client.websocket_connect("/ws/download") as ws:
+        ws.send_json({"urls": [VIDEO], "format": "mp3"})
+        assert ws.receive_text().startswith("INFO:")
+        assert ws.receive_text().startswith("INFO:")
+        message = ws.receive_text()
+        assert "[YOUTUBE_AUTH_REQUIRED]" in message
+        assert "Windows 앱" in message
+        assert "--cookies" not in message
+        assert ws.receive_text().startswith("ERROR:")
+    assert not module.ACTIVE_JOBS
+
+
 def test_proxy_cookie_runtime_and_limits(monkeypatch, tmp_path):
     monkeypatch.setenv("YDOWN_PROXY", "socks5://127.0.0.1:40000")
     monkeypatch.setenv("YDOWN_COOKIE_FILE", "/private/cookies.txt")

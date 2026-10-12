@@ -207,6 +207,14 @@ def build_ydl_opts(audio_format, progress_hook, output_dir):
     return opts
 
 
+def download_error_message(error):
+    message = str(error)
+    if "sign in to confirm" in message.lower() and "not a bot" in message.lower():
+        return ("[YOUTUBE_AUTH_REQUIRED] YouTube가 현재 서버의 연결에 추가 인증을 요구합니다. "
+                "Windows 앱에서 다시 시도해 주세요.")
+    return message[:300]
+
+
 @app.websocket("/ws/download")
 async def websocket_download(websocket: WebSocket):
     origin = websocket.headers.get("origin")
@@ -266,7 +274,7 @@ async def websocket_download(websocket: WebSocket):
                 await websocket.send_text(f"FILE_READY:{job_id}/{quote(path.name)}:{path.name}")
                 success += 1
             except Exception as error:
-                await websocket.send_text(f"ERROR: [{idx}] 다운로드 실패 - {str(error)[:300]}")
+                await websocket.send_text(f"ERROR: [{idx}] 다운로드 실패 - {download_error_message(error)}")
         await websocket.send_text(f"SUCCESS: {success}개 성공, {len(urls) - success}개 실패." if success
                                   else "ERROR: 모든 다운로드가 실패했습니다.")
     except (ValueError, asyncio.TimeoutError) as error:
