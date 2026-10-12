@@ -1,5 +1,10 @@
 # YDown development instructions
 
+## Planning documents and current scope
+
+- Keep every unimplemented feature, proposal, design decision, and future task in the root `plan.md`. Other documents should link to it rather than duplicate plans. README.md describes implemented behavior and verification results.
+- The current Phase 2 request is design-only: preserve Phase 1 and describe adding online extraction using the always-on Windows PC. Do not implement Phase 2, change deployment/network settings, or create permanent background services without a subsequent implementation request.
+
 ## Deployment feasibility and verification
 
 - Before recommending a hosting platform or claiming the app works on the web, explain that YouTube may require authentication or reject requests from the hosting network. Local success does not establish cloud feasibility.
