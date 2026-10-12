@@ -1,5 +1,8 @@
 #!/bin/sh
 set -eu
+if [ "${YDOWN_MODE:-extractor}" = "download-site" ]; then
+    exec uvicorn download_site:app --host 0.0.0.0 --port "${PORT:-8000}" --workers 1
+fi
 # Optional operator-provided cookies; no implicit third-party account registration.
 if [ -n "${YOUTUBE_COOKIES:-}" ]; then
     umask 077

@@ -7,10 +7,10 @@ YouTube 영상에서 MP3, M4A, Opus 오디오를 추출하는 **브라우저 기
 **현재 권장 사용 방식:** [Windows 설치 파일 다운로드](https://github.com/loginheaven-jpg/Ydown/releases/latest/download/YDown-Setup-x64.exe).
 설치 후 브라우저 화면을 사용하며, 다운로드와 변환은 사용 중인 PC에서 실행합니다.
 
-**웹 배포 상태:** [Railway 웹앱](https://ydown-audio-production.up.railway.app)은 접속할 수 있지만,
-2026-10-12 실제 검증에서 YouTube의 추가 인증 요구로 오디오 추출이 실패했습니다.
-현재 정상 사용 가능한 클라우드 추출 서비스로 안내하지 않습니다.
-접속 사용자 이름은 `ydown`, 비밀번호는 운영자가 설정한 값입니다.
+**다운로드 사이트:** [ydown.yebom.org](https://ydown.yebom.org).
+최신 정식 릴리스의 설치 파일, ZIP 버전, 설치·업데이트 방법을 로그인 없이 안내합니다.
+릴리스 정보는 GitHub에서 가져오며, 새 정식 릴리스를 게시하면 다운로드 링크가 최신 버전을 가리킵니다.
+이 사이트에서는 오디오를 추출하지 않습니다.
 
 ## 다른 Windows PC에서 사용하기
 
@@ -40,7 +40,25 @@ Python, FFmpeg, Node.js는 모두 포함됩니다. 별도 설치와 관리자 �
 > 최초 릴리스가 게시되기 전에는 위 다운로드 링크에 파일이 없습니다.
 > 개발 중 생성한 설치 파일과 ZIP은 이 저장소의 `dist/`에 있습니다.
 
-## 설치 없이 웹으로 사용하기
+## Phase 1: 다운로드 사이트 운영
+
+Railway 서비스의 `YDOWN_MODE`를 `download-site`로 설정하면 `download_site.py`를 실행합니다.
+서비스의 기본 Docker 시작 명령(`/app/entrypoint.sh`)을 사용하며, Healthcheck Path는 `/health`입니다.
+`ydown.yebom.org`는 이 서비스에 연결되어 있습니다. 다운로드 사이트에는 로그인과 추출 API가
+없으며, 기존 `YDOWN_PASSWORD` 설정을 사용하지 않습니다. 설치 파일은 GitHub Releases에서 제공합니다.
+Windows 앱과 기본 Docker 실행은 계속 `app.py`의 추출 기능을 사용합니다.
+
+사이트를 로컬에서 확인하려면:
+
+```powershell
+.\.venv\Scripts\python.exe -m uvicorn download_site:app --host 127.0.0.1 --port 18765
+```
+
+## Phase 2 검토: 상시 PC에서 설치 없이 웹으로 사용하기
+
+현재의 계획과 실제 PC 측정에 기반한 검토는 [상시 PC 서버 검토](docs/server-plan.md)에 있습니다.
+기본 추출 UI는 이미 재사용할 수 있지만, 별도 프로세스·자동 실행·접근 제한·작업 대기열과
+기존 성경음원/받아쓰기 작업에 대한 영향 검증을 완료한 후 공개해야 합니다.
 
 현재 Railway 환경의 YouTube 추출은 검증 실패 상태입니다. 아래 내용은 서버 실행 방법이며,
 다운로드 성공을 보장하는 운영 안내가 아닙니다. `/health` 성공과 화면 표시만으로 웹 사용
@@ -51,6 +69,9 @@ Python, FFmpeg, Node.js는 모두 포함됩니다. 별도 설치와 관리자 �
 데스크톱 앱을 웹으로 다시 작성할 필요가 없습니다.
 
 ### Railway 배포
+
+아래 절차는 추출 서버 실행용이며 Phase 1 다운로드 사이트와 구별됩니다.
+Phase 1에서는 위의 `YDOWN_MODE=download-site` 설정을 사용하세요.
 
 1. Railway에서 GitHub 저장소 `loginheaven-jpg/Ydown`의 `main`을 연결합니다.
    저장소 루트의 Dockerfile로 FFmpeg와 Node.js를 포함해 빌드합니다.
@@ -167,6 +188,7 @@ FFmpeg/Node.js 빌드 입력은 `packaging/runtime-manifest.json`에서 URL과 S
 | 환경 변수 | 기본값 / 용도 |
 | --- | --- |
 | `PORT` | `8000`, 컨테이너 또는 `python app.py` 포트 |
+| `YDOWN_MODE` | 컨테이너 기본 `extractor`; `download-site`이면 공개 다운로드 사이트만 실행 |
 | `YDOWN_HOST` | `127.0.0.1`, `python app.py` 접속 주소 |
 | `YDOWN_DATA_DIR` | 소스 실행: 저장소 폴더, Windows 패키지: `%LOCALAPPDATA%\YDown`, 컨테이너: `/data` |
 | `YDOWN_PASSWORD` | 공유 웹 서버의 비밀번호, 사용자 이름 `ydown` |
@@ -189,6 +211,7 @@ FFmpeg/Node.js 빌드 입력은 `packaging/runtime-manifest.json`에서 URL과 S
 | --- | --- |
 | `app.py` | 웹 UI, 진행 상황 WebSocket, 오디오 추출, 파일 제공, 정리, 업데이트 확인 |
 | `templates/index.html` | 실제 사용하는 브라우저 화면 |
+| `download_site.py`, `templates/download.html` | Phase 1 공개 다운로드·업데이트 안내 사이트 |
 | `launch.py` | Windows 실행 창과 브라우저 자동 열기, headless 실행 |
 | `settings.py`, `version.py` | 소스/패키지별 경로와 버전 |
 | `scripts/`, `packaging/` | 런타임 준비, 설치 파일 생성, 독립 실행 검사 |

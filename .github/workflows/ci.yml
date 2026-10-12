@@ -38,3 +38,14 @@ jobs:
           docker exec -i ydown-test python < scripts/check-container.py
       - if: always()
         run: docker logs ydown-test
+      - name: Verify public download site mode
+        shell: bash
+        run: |
+          docker run -d --name ydown-site -e YDOWN_MODE=download-site -e YDOWN_PASSWORD=ci-password -e YDOWN_REQUIRE_PASSWORD=1 ydown:test
+          for i in {1..30}; do
+            if docker exec ydown-site python -c "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health',timeout=3)"; then break; fi
+            sleep 1
+          done
+          docker exec -i ydown-site python < scripts/check-download-site.py
+      - if: always()
+        run: docker logs ydown-site
