@@ -103,7 +103,8 @@ async def index(request: Request):
 @app.get("/health")
 async def health():
     ready = all(executable(name) for name in ("ffmpeg", "ffprobe", "node"))
-    return JSONResponse({"status": "ok" if ready else "missing_dependencies", "version": VERSION},
+    return JSONResponse({"status": "ok" if ready else "missing_dependencies", "version": VERSION,
+                         "download_engine": yt_dlp.version.__version__},
                         status_code=200 if ready else 503)
 
 
