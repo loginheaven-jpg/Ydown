@@ -23,8 +23,7 @@ Copy-Item -LiteralPath "packaging\THIRD-PARTY-NOTICES.md" -Destination "dist\YDo
 Run-Python -m piplicenses --format=json --with-license-file --with-urls `
     --output-file=dist/YDown/third-party-licenses.json
 Run-Python scripts/smoke-bundle.py dist/YDown/YDown.exe
-$archive = Join-Path $root "dist\YDown-$version-windows-x64.zip"
-Compress-Archive -Path "dist\YDown" -DestinationPath $archive -Force
+Run-Python scripts/package-windows.py
 if (!$SkipInstaller) {
     $candidates = @(
         (Join-Path $root ".tools\inno\ISCC.exe"),
