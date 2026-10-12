@@ -38,6 +38,30 @@ Python, FFmpeg, Node.js는 모두 포함됩니다. 별도 설치와 관리자 �
 실행하고 사용자가 결과를 자신의 기기에 저장합니다. 기존 앱이 이미 이 구조이므로
 데스크톱 앱을 웹으로 다시 작성할 필요가 없습니다.
 
+### Railway 배포
+
+1. Railway에서 GitHub 저장소 `loginheaven-jpg/Ydown`의 `main`을 연결합니다.
+   저장소 루트의 Dockerfile로 FFmpeg와 Node.js를 포함해 빌드합니다.
+2. 서비스의 **Variables**에서 아래 세 변수를 설정합니다.
+
+   | 변수 | 값 |
+   | --- | --- |
+   | `YDOWN_REQUIRE_PASSWORD` | `1` |
+   | `YDOWN_PASSWORD` | 사용자가 정한 비밀번호 (빈 값으로 두지 않음) |
+   | `YDOWN_MAX_CONCURRENT_JOBS` | 우선 `1`로 운영 |
+
+3. 서비스의 Healthcheck Path를 `/health`로 설정하고 변경 사항을 배포합니다.
+4. **Settings → Networking → Generate Domain**으로 HTTPS 주소를 발급합니다.
+   앱은 Railway가 제공한 `PORT`에서 실행됩니다.
+5. 해당 주소에서 사용자 이름 **ydown**과 지정한 비밀번호로 접속합니다.
+   짧은 영상 한 개의 추출과 파일 다운로드까지 확인하세요.
+
+`YDOWN_REQUIRE_PASSWORD=1`인데 `YDOWN_PASSWORD`가 없으면 앱이 시작되지 않습니다.
+배포 로그에 `Set YDOWN_PASSWORD before exposing YDown to the internet.`가 나타나면
+비밀번호 변수를 추가하고 다시 배포하세요. 비밀번호를 GitHub에 기록하지 마세요.
+
+### Render 배포
+
 [![Deploy to Render](https://render.com/images/deploy-to-render-button.svg)](https://render.com/deploy?repo=https://github.com/loginheaven-jpg/Ydown)
 
 저장소의 배포 변경이 `main`에 반영된 후 위 버튼으로 Render Blueprint를 생성합니다.
