@@ -1,0 +1,15 @@
+.git
+.github
+.venv
+.tools
+build
+dist
+runtime
+downloads
+tests
+__pycache__
+.pytest_cache
+.env
+*.log
+cookies.txt
+warp-data
