@@ -4,7 +4,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>YDown - Local Audio Extractor</title>
+    <title>YDown - 오디오 추출기</title>
     <!-- 불필요한 파비콘 요청(404 에러) 방지 -->
     <link rel="icon" href="data:,">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
@@ -299,7 +299,7 @@
     <div class="container">
         <div class="header">
             <h1>YDown Audio</h1>
-            <p>최상음질 오디오 추출기 (Max Quality)</p>
+            <p>브라우저에서 사용하는 오디오 추출기 · v{{ version }}</p>
         </div>
 
         <div class="form-group url-list" id="urlListGroup">
@@ -321,7 +321,7 @@
         </div>
 
         <div class="form-group">
-            <label for="formatSelect">오디오 포맷 (320kbps 최상음질 적용)</label>
+            <label for="formatSelect">오디오 포맷 (최대 320kbps 변환)</label>
             <select id="formatSelect">
                 <option value="mp3">MP3 (호환성 최우선)</option>
                 <option value="m4a">M4A (애플 기기 최적화)</option>
@@ -346,10 +346,40 @@
                 <!-- 파일 다운로드 링크가 여기에 생성됩니다 -->
             </div>
         </div>
+        <p style="margin-top:1rem; font-size:0.8rem; color:var(--text-muted); line-height:1.6;">
+            파일은 서버에 {{ retention_minutes }}분 동안 임시 보관됩니다. 완료된 파일의 다운로드 버튼을 눌러 저장하세요.
+            원본보다 음질이 좋아지지는 않습니다.
+        </p>
+        <div style="display:flex; flex-wrap:wrap; gap:1rem; margin-top:1rem; font-size:0.85rem;">
+            <a href="{{ installer_url }}" style="color:#93c5fd;">Windows 설치 파일</a>
+            <a href="{{ releases_url }}" target="_blank" rel="noopener" style="color:#93c5fd;">다운로드 / 업데이트</a>
+            <button id="updateBtn" onclick="checkUpdate()" style="background:none; border:0; color:#93c5fd; cursor:pointer;">업데이트 확인</button>
+        </div>
+        <p id="updateStatus" role="status" style="margin-top:0.5rem; font-size:0.8rem; color:var(--text-muted);"></p>
     </div>
 
     <script>
         let ws = null;
+        let completed = false;
+
+        async function checkUpdate() {
+            const button = document.getElementById('updateBtn');
+            const status = document.getElementById('updateStatus');
+            button.disabled = true;
+            status.textContent = '최신 버전을 확인하고 있습니다...';
+            try {
+                const response = await fetch('/api/update');
+                if (!response.ok) throw new Error('update failed');
+                const result = await response.json();
+                status.textContent = result.available
+                    ? `새 버전 v${result.latest_version}이 있습니다. Windows 설치 파일을 받아 실행하세요.`
+                    : result.message || `현재 v${result.current_version} · 최신 버전입니다.`;
+            } catch (_) {
+                status.textContent = '업데이트를 확인할 수 없습니다. 다운로드 / 업데이트 링크를 이용하세요.';
+            } finally {
+                button.disabled = false;
+            }
+        }
 
         function startDownload() {
             const inputs = document.querySelectorAll('.url-input');
@@ -381,6 +411,7 @@
             const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
             const wsUrl = `${protocol}//${window.location.host}/ws/download`;
             ws = new WebSocket(wsUrl);
+            completed = false;
 
             ws.onopen = () => {
                 ws.send(JSON.stringify({
@@ -404,11 +435,10 @@
                 } else if (msg.startsWith("SUCCESS:")) {
                     appendLog(msg.replace("SUCCESS:", "✅ 성공:"), 'success');
                     updateContainerStatus('success', "작업 완료");
-                    resetUI();
+                    completed = true;
                 } else if (msg.startsWith("ERROR:")) {
                     appendLog(msg.replace("ERROR:", "❌ 오류:"), 'error');
                     updateContainerStatus('error', "에러 발생");
-                    resetUI();
                 } else {
                     appendLog(msg, 'active');
                 }
@@ -421,6 +451,10 @@
             };
 
             ws.onclose = () => {
+                if (!completed && document.getElementById('statusContainer').classList.contains('active')) {
+                    appendLog('ERROR: 작업 완료 전에 연결이 종료되었습니다. 다시 시도하세요.', 'error');
+                    updateContainerStatus('error', '연결 종료');
+                }
                 resetUI();
             };
         }
@@ -457,21 +491,17 @@
 
         function addDownloadLink(encodedName, displayName) {
             const linksContainer = document.getElementById('downloadLinks');
-            const fileUrl = `/downloads/${encodedName}`;
+            const fileUrl = `/stream/${encodedName}`;
 
             // 완료 라벨 표시
-            const div = document.createElement('div');
+            const div = document.createElement('a');
             div.className = 'file-link';
-            div.innerHTML = `<span>✅ ${displayName}</span>`;
+            div.href = fileUrl;
+            div.download = displayName;
+            div.textContent = `✅ ${displayName} · 다운로드`;
             linksContainer.appendChild(div);
             linksContainer.classList.add('has-items');
 
-            // 자동 다운로드
-            const a = document.createElement('a');
-            a.href = fileUrl;
-            a.download = displayName;
-            document.body.appendChild(a);
-            setTimeout(() => { a.click(); document.body.removeChild(a); }, 500);
         }
 
         function resetUI() {
@@ -484,9 +514,6 @@
             downloadBtn.disabled = false;
             downloadBtn.classList.remove('loading');
 
-            if (ws && ws.readyState === WebSocket.OPEN) {
-                ws.close();
-            }
         }
     </script>
 </body>

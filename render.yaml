@@ -1,6 +1,15 @@
 services:
   - type: web
     name: ydown-audio
-    env: docker
+    runtime: docker
+    region: singapore
     plan: free
     healthCheckPath: /health
+    autoDeployTrigger: checksPass
+    envVars:
+      - key: YDOWN_REQUIRE_PASSWORD
+        value: "1"
+      - key: YDOWN_PASSWORD
+        sync: false
+      - key: YDOWN_MAX_CONCURRENT_JOBS
+        value: "1"

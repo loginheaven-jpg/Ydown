@@ -23,3 +23,15 @@ Thumbs.db
 
 # Executables
 *.exe
+
+.venv/
+.tools/
+build/
+dist/
+runtime/
+*.spec
+.pytest_cache/
+*.log
+.env
+cookies.txt
+warp-data/
