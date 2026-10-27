@@ -27,6 +27,9 @@ FILE_TTL_SECONDS = max(60, int(os.environ.get("YDOWN_FILE_TTL_SECONDS", "3600"))
 MAX_CONCURRENT_JOBS = max(1, int(os.environ.get("YDOWN_MAX_CONCURRENT_JOBS", "2")))
 MAX_DURATION = int(os.environ.get("YDOWN_MAX_DURATION_SECONDS", "3600"))
 MAX_FILESIZE = int(os.environ.get("YDOWN_MAX_FILESIZE_MB", "250")) * 1024 * 1024
+MAX_VIDEO_FILESIZE = int(os.environ.get("YDOWN_MAX_VIDEO_FILESIZE_MB", "2048")) * 1024 * 1024
+MEDIA_FORMATS = {"mp3", "m4a", "opus", "mp4"}
+VIDEO_QUALITIES = {"480", "720", "1080"}
 ACTIVE_JOBS = set()
 logger = logging.getLogger("ydown")
 templates = Jinja2Templates(directory=str(BASE_DIR / "templates"))
@@ -143,7 +146,7 @@ async def update():
 async def stream_file(filename: str):
     parts = filename.split("/")
     if (len(parts) != 2 or not re.fullmatch(r"[a-f0-9]{32}", parts[0])
-            or "\\" in parts[1] or Path(parts[1]).suffix not in {".mp3", ".m4a", ".opus"}):
+            or "\\" in parts[1] or Path(parts[1]).suffix not in {"." + fmt for fmt in MEDIA_FORMATS}):
         return JSONResponse({"error": "파일이 없거나 보관 시간이 지났습니다."}, status_code=404)
     filepath = (DOWNLOAD_DIR / filename).resolve()
     if not filepath.is_relative_to(DOWNLOAD_DIR.resolve()) or not filepath.is_file():
@@ -153,8 +156,12 @@ async def stream_file(filename: str):
 
 def validate_request(data):
     if (not isinstance(data, dict) or not isinstance(data.get("format", "mp3"), str)
-            or data.get("format", "mp3") not in {"mp3", "m4a", "opus"}):
-        raise ValueError("MP3, M4A, Opus 중 하나를 선택하세요.")
+            or data.get("format", "mp3") not in MEDIA_FORMATS):
+        raise ValueError("MP3, M4A, Opus, MP4 중 하나를 선택하세요.")
+    if data.get("format") == "mp4" and (
+            not isinstance(data.get("quality", "1080"), str)
+            or data.get("quality", "1080") not in VIDEO_QUALITIES):
+        raise ValueError("영상 최대 화질은 480p, 720p, 1080p 중 하나를 선택하세요.")
     urls = data.get("urls")
     if not isinstance(urls, list) or not 1 <= len(urls) <= 10 or not all(isinstance(u, str) for u in urls):
         raise ValueError("YouTube URL을 1~10개 입력하세요.")
@@ -179,22 +186,37 @@ def validate_request(data):
     return clean, data.get("format", "mp3")
 
 
-def build_ydl_opts(audio_format, progress_hook, output_dir):
+def build_ydl_opts(media_format, progress_hook, output_dir, quality="1080"):
+    video = media_format == "mp4"
+    if video and quality not in VIDEO_QUALITIES:
+        raise ValueError("지원하지 않는 영상 화질입니다.")
+    max_size = MAX_VIDEO_FILESIZE if video else MAX_FILESIZE
     def limit(info, *, incomplete=False):
         if info.get("is_live"):
             return "진행 중인 실시간 방송은 지원하지 않습니다."
         if (info.get("duration") or 0) > MAX_DURATION:
             return f"영상 길이는 최대 {MAX_DURATION // 60}분입니다."
-        if (info.get("filesize") or info.get("filesize_approx") or 0) > MAX_FILESIZE:
+        tracks = info.get("requested_formats") or [info]
+        if sum(track.get("filesize") or track.get("filesize_approx") or 0 for track in tracks) > max_size:
             return "다운로드 크기 제한을 초과했습니다."
         return None
     opts = {
         "format": "bestaudio/best", "outtmpl": str(output_dir / "%(title).150B [%(id)s].%(ext)s"),
         "progress_hooks": [progress_hook], "noplaylist": True, "windowsfilenames": True,
-        "overwrites": True, "max_filesize": MAX_FILESIZE, "match_filter": limit,
-        "postprocessors": [{"key": "FFmpegExtractAudio", "preferredcodec": audio_format, "preferredquality": "320"}],
+        "overwrites": True, "max_filesize": max_size, "match_filter": limit,
         "quiet": True, "noprogress": True, "retries": 3, "fragment_retries": 3, "socket_timeout": 30,
     }
+    if video:
+        # Copy H.264 + AAC streams into MP4, without upscaling or video re-encoding.
+        opts.update(
+            format=(f"bestvideo[height<={quality}][ext=mp4][vcodec^=avc]+bestaudio[ext=m4a]"
+                    f"/best[height<={quality}][ext=mp4][vcodec^=avc][acodec!=none]"),
+            merge_output_format="mp4",
+            postprocessors=[{"key": "FFmpegVideoRemuxer", "preferedformat": "mp4"}],
+        )
+    else:
+        opts["postprocessors"] = [{"key": "FFmpegExtractAudio", "preferredcodec": media_format,
+                                   "preferredquality": "320"}]
     if executable("ffmpeg"):
         opts["ffmpeg_location"] = str(Path(executable("ffmpeg")).parent)
     if executable("node"):
@@ -212,6 +234,8 @@ def download_error_message(error):
     if "sign in to confirm" in message.lower() and "not a bot" in message.lower():
         return ("[YOUTUBE_AUTH_REQUIRED] YouTube가 현재 서버의 연결에 추가 인증을 요구합니다. "
                 "Windows 앱에서 다시 시도해 주세요.")
+    if "Requested format is not available" in message:
+        return "선택한 형식과 최대 화질로 다운로드할 수 있는 영상·음원 트랙이 없습니다. 다른 형식이나 최대 화질을 선택해 주세요."
     return message[:300]
 
 
@@ -227,7 +251,8 @@ async def websocket_download(websocket: WebSocket):
     disconnected = threading.Event()
     try:
         data = await asyncio.wait_for(websocket.receive_json(), timeout=30)
-        urls, audio_format = validate_request(data)
+        urls, media_format = validate_request(data)
+        quality = data.get("quality", "1080")
         if not all(executable(name) for name in ("ffmpeg", "ffprobe", "node")):
             raise ValueError("FFmpeg 또는 Node.js가 없습니다. Windows 설치 파일을 이용하세요.")
         if len(ACTIVE_JOBS) >= MAX_CONCURRENT_JOBS:
@@ -238,28 +263,40 @@ async def websocket_download(websocket: WebSocket):
         ACTIVE_JOBS.add(job_id)
         loop = asyncio.get_running_loop()
         messages = asyncio.Queue(maxsize=100)
+        transfer_sizes = {}
+        max_size = MAX_VIDEO_FILESIZE if media_format == "mp4" else MAX_FILESIZE
         def enqueue(message):
             if not messages.full():
                 messages.put_nowait(message)
         def hook(info):
             if disconnected.is_set():
                 raise yt_dlp.utils.DownloadError("클라이언트 연결 종료")
+            if info["status"] in {"downloading", "finished"}:
+                filename = info.get("filename", "download")
+                transfer_sizes[filename] = max(transfer_sizes.get(filename, 0), info.get("downloaded_bytes", 0))
+                if sum(transfer_sizes.values()) > max_size:
+                    raise yt_dlp.utils.DownloadError("영상과 음원을 합친 다운로드 크기 제한을 초과했습니다.")
             if info["status"] == "downloading":
                 loop.call_soon_threadsafe(enqueue, "PROGRESS: " + info.get("_percent_str", "").strip())
             elif info["status"] == "finished":
-                loop.call_soon_threadsafe(enqueue, "PROGRESS: 다운로드 완료. 오디오 변환 중...")
-        await websocket.send_text(f"INFO: {len(urls)}개 영상에서 {audio_format.upper()} 오디오를 추출합니다.")
+                loop.call_soon_threadsafe(enqueue, "PROGRESS: 트랙 다운로드 완료. 파일을 준비하고 있습니다...")
+        description = f"MP4 영상+음성 (최대 {quality}p)" if media_format == "mp4" else f"{media_format.upper()} 오디오"
+        await websocket.send_text(f"INFO: {len(urls)}개 영상에서 {description}를 다운로드합니다.")
         success = 0
         for idx, url in enumerate(urls, 1):
+            transfer_sizes.clear()
             await websocket.send_text(f"INFO: [{idx}/{len(urls)}] {url}")
             def download():
-                with yt_dlp.YoutubeDL(build_ydl_opts(audio_format, hook, output_dir)) as ydl:
+                with yt_dlp.YoutubeDL(build_ydl_opts(media_format, hook, output_dir, quality)) as ydl:
                     info = ydl.extract_info(url, download=True)
                     if info is None:
                         raise ValueError("영상이 길이 또는 크기 제한을 초과했습니다.")
-                    path = Path(ydl.prepare_filename(info)).with_suffix("." + audio_format)
-                    if not path.is_file():
+                    path = Path(info.get("filepath") or ydl.prepare_filename(info)).with_suffix("." + media_format).resolve()
+                    if not path.is_relative_to(output_dir.resolve()) or not path.is_file():
                         raise ValueError("변환된 파일을 찾을 수 없습니다.")
+                    if path.stat().st_size > max_size:
+                        path.unlink()
+                        raise ValueError("완료된 파일의 크기 제한을 초과했습니다.")
                     return path
             worker = asyncio.create_task(asyncio.to_thread(download))
             while not worker.done():

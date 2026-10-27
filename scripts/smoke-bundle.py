@@ -45,7 +45,19 @@ def main():
                 subprocess.run([str(runtime / "ffmpeg.exe"), "-f", "lavfi", "-i", "sine=frequency=440:duration=0.1",
                                 "-c:a", codec, str(Path(work) / ("tone." + extension))],
                                check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, env=environment)
-            print("Bundle smoke passed: isolated startup, templates, dependencies, MP3/M4A/Opus conversion")
+            # Exercise the bundled video/audio merger and confirm both streams survive.
+            video = Path(work) / "video.mp4"
+            merged = Path(work) / "merged.mp4"
+            subprocess.run([str(runtime / "ffmpeg.exe"), "-f", "lavfi", "-i", "testsrc=size=160x90:rate=10",
+                            "-t", "0.2", "-c:v", "mpeg4", "-an", str(video)], check=True,
+                           stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, env=environment)
+            subprocess.run([str(runtime / "ffmpeg.exe"), "-i", str(video), "-i", str(Path(work) / "tone.m4a"),
+                            "-c", "copy", "-shortest", str(merged)], check=True,
+                           stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, env=environment)
+            probe = subprocess.check_output([str(runtime / "ffprobe.exe"), "-v", "error", "-show_streams",
+                                             "-of", "json", str(merged)], env=environment)
+            assert {stream["codec_type"] for stream in json.loads(probe)["streams"]} == {"audio", "video"}
+            print("Bundle smoke passed: isolated startup, dependencies, audio conversion, MP4 video+audio merge")
         finally:
             process.terminate()
             process.wait(timeout=15)

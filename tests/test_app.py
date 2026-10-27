@@ -191,3 +191,73 @@ def test_public_startup_requires_password(monkeypatch):
     with pytest.raises(RuntimeError, match="YDOWN_PASSWORD"):
         with TestClient(module.app):
             pass
+
+
+@pytest.mark.parametrize("quality", ["360", "2160", 1080, [], None])
+def test_invalid_video_quality(quality):
+    with pytest.raises(ValueError):
+        module.validate_request({"urls": [VIDEO], "format": "mp4", "quality": quality})
+
+
+@pytest.mark.parametrize("quality", ["480", "720", "1080"])
+def test_real_format_selection_respects_maximum_and_preserves_audio(quality, monkeypatch, tmp_path):
+    monkeypatch.setattr(module, "executable", lambda name: None)
+    formats = [
+        {"format_id": str(height), "url": f"https://example.org/{height}.mp4", "ext": "mp4",
+         "height": height, "width": height * 16 // 9, "vcodec": "avc1.640028", "acodec": "none"}
+        for height in (360, 480, 720, 1080, 2160)
+    ] + [{"format_id": "audio", "url": "https://example.org/audio.m4a", "ext": "m4a",
+          "vcodec": "none", "acodec": "mp4a.40.2"}]
+    options = module.build_ydl_opts("mp4", lambda data: None, tmp_path, quality)
+    with module.yt_dlp.YoutubeDL(options) as downloader:
+        info = downloader.process_ie_result({"id": "video", "title": "test", "formats": formats}, download=False)
+    video, audio = info["requested_formats"]
+    assert video["height"] == int(quality)
+    assert audio["acodec"] == "mp4a.40.2"
+    assert options["merge_output_format"] == "mp4"
+
+
+def test_combined_video_track_size_limit(monkeypatch, tmp_path):
+    monkeypatch.setattr(module, "MAX_VIDEO_FILESIZE", 100)
+    options = module.build_ydl_opts("mp4", lambda data: None, tmp_path)
+    assert options["match_filter"]({"requested_formats": [{"filesize": 60}, {"filesize": 50}]})
+    assert options["match_filter"]({"requested_formats": [{"filesize": 60}, {"filesize": 30}]}) is None
+
+
+def test_mp4_websocket_final_path_and_download(client, monkeypatch):
+    class VideoDownloader(FakeDownloader):
+        def extract_info(self, url, download):
+            output = Path(self.options["outtmpl"]).parent / "한글 영상.mp4"
+            output.write_bytes(b"video-with-audio")
+            self.options["progress_hooks"][0]({"status": "finished"})
+            return {"path": str(output.with_suffix(".webm")), "filepath": str(output)}
+    monkeypatch.setattr(module.yt_dlp, "YoutubeDL", VideoDownloader)
+    with client.websocket_connect("/ws/download") as ws:
+        ws.send_json({"urls": [VIDEO], "format": "mp4", "quality": "720"})
+        messages = []
+        while not messages or not messages[-1].startswith("SUCCESS:"):
+            messages.append(ws.receive_text())
+    assert "최대 720p" in messages[0]
+    ready = next(message for message in messages if message.startswith("FILE_READY:"))
+    response = client.get("/downloads/" + ready.split(":")[1])
+    assert response.status_code == 200
+    assert response.content == b"video-with-audio"
+    assert ".mp4" in response.headers["content-disposition"]
+
+
+def test_unknown_size_tracks_stop_at_combined_transfer_limit(client, monkeypatch):
+    monkeypatch.setattr(module, "MAX_VIDEO_FILESIZE", 100)
+    class LargeDownloader(FakeDownloader):
+        def extract_info(self, url, download):
+            hook = self.options["progress_hooks"][0]
+            hook({"status": "downloading", "filename": "video.mp4", "downloaded_bytes": 60})
+            hook({"status": "downloading", "filename": "audio.m4a", "downloaded_bytes": 50})
+            raise AssertionError("Should stop before continuing transfer")
+    monkeypatch.setattr(module.yt_dlp, "YoutubeDL", LargeDownloader)
+    with client.websocket_connect("/ws/download") as ws:
+        ws.send_json({"urls": [VIDEO], "format": "mp4"})
+        messages = []
+        while not messages or messages[-1] != "ERROR: 모든 다운로드가 실패했습니다.":
+            messages.append(ws.receive_text())
+    assert any("크기 제한" in message for message in messages)
+    assert not any(message.startswith("FILE_READY:") for message in messages)

@@ -44,6 +44,7 @@ def test_latest_release_metadata_and_cache(monkeypatch):
     monkeypatch.setattr(module.urllib.request, "urlopen", fetch)
     result = module.latest_release()
     assert result["version"] == "1.2.3"
+    assert result["video_available"] is True
     assert result["portable_url"].endswith("/download/YDown-1.2.3-windows-x64.zip")
     assert module.latest_release() == result
     assert len(calls) == 1
@@ -56,5 +57,16 @@ def test_github_unavailable_preserves_latest_download_links(monkeypatch):
     monkeypatch.setattr(module.urllib.request, "urlopen", unavailable)
     result = module.latest_release()
     assert result["version"] is None
+    assert result["video_available"] is False
     assert result["installer_url"] == module.INSTALLER_URL
     assert result["portable_url"] == module.RELEASES_URL
+
+
+@pytest.mark.parametrize("version, supports_video", [("0.2.0", False), ("0.3.0", True)])
+def test_video_advertising_follows_published_release(monkeypatch, version, supports_video):
+    monkeypatch.setattr(module, "latest_release", lambda: {
+        "version": version, "video_available": supports_video,
+        "installer_url": module.INSTALLER_URL, "portable_url": module.RELEASES_URL,
+        "releases_url": module.RELEASES_URL})
+    with TestClient(module.app) as client:
+        assert ("MP4 영상은 음성과 함께" in client.get("/").text) is supports_video

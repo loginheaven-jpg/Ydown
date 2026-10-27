@@ -22,7 +22,7 @@ def latest_release():
     with _lock:
         if time.monotonic() < _cache["expires"]:
             return _cache["value"]
-        result = {"version": None, "portable_url": RELEASES_URL,
+        result = {"version": None, "video_available": False, "portable_url": RELEASES_URL,
                   "installer_url": INSTALLER_URL, "releases_url": RELEASES_URL}
         try:
             request = urllib.request.Request(
@@ -33,6 +33,7 @@ def latest_release():
             version = release.get("tag_name", "").removeprefix("v")
             if re.fullmatch(r"\d+\.\d+\.\d+", version):
                 result["version"] = version
+                result["video_available"] = tuple(map(int, version.split("."))) >= (0, 3, 0)
                 zip_name = f"YDown-{version}-windows-x64.zip"
                 if any(asset.get("name") == zip_name for asset in release.get("assets", [])):
                     result["portable_url"] = RELEASES_URL + "/download/" + quote(zip_name)
