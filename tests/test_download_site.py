@@ -70,3 +70,23 @@ def test_video_advertising_follows_published_release(monkeypatch, version, suppo
         "releases_url": module.RELEASES_URL})
     with TestClient(module.app) as client:
         assert ("MP4 영상은 음성과 함께" in client.get("/").text) is supports_video
+
+
+def test_public_redirect_recovers_version_when_api_is_unavailable(monkeypatch):
+    class Redirect:
+        def __enter__(self):
+            return self
+        def __exit__(self, *args):
+            pass
+        def geturl(self):
+            return "https://github.com/loginheaven-jpg/Ydown/releases/tag/v0.3.1"
+    def fetch(request, **kwargs):
+        if request.get_method() == "HEAD":
+            return Redirect()
+        raise OSError("GitHub API unavailable")
+    monkeypatch.setattr(module, "_cache", {"expires": 0, "value": None})
+    monkeypatch.setattr(module.urllib.request, "urlopen", fetch)
+    result = module.latest_release()
+    assert result["version"] == "0.3.1"
+    assert result["video_available"] is True
+    assert result["portable_url"].endswith("/YDown-0.3.1-windows-x64.zip")

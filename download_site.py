@@ -38,9 +38,21 @@ def latest_release():
                 if any(asset.get("name") == zip_name for asset in release.get("assets", [])):
                     result["portable_url"] = RELEASES_URL + "/download/" + quote(zip_name)
         except (OSError, ValueError, TypeError, AttributeError):
-            # Fixed latest-release links remain useful if GitHub metadata is unavailable.
-            pass
-        _cache.update(expires=time.monotonic() + 300, value=result)
+            # Public release redirects also work when GitHub's API quota is exhausted.
+            try:
+                request = urllib.request.Request(RELEASES_URL, method="HEAD",
+                                                 headers={"User-Agent": "YDown-Download-Site"})
+                with urllib.request.urlopen(request, timeout=5) as response:
+                    match = re.fullmatch(re.escape(RELEASES_URL.removesuffix("latest"))
+                                         + r"tag/v?(\d+\.\d+\.\d+)", response.geturl())
+                if match:
+                    version = match.group(1)
+                    result.update(version=version,
+                                  video_available=tuple(map(int, version.split("."))) >= (0, 3, 0),
+                                  portable_url=RELEASES_URL + f"/download/YDown-{version}-windows-x64.zip")
+            except (OSError, ValueError, AttributeError):
+                pass
+        _cache.update(expires=time.monotonic() + (300 if result["version"] else 30), value=result)
         return result
 
 
