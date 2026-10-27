@@ -291,6 +291,19 @@
         .btn.loading span {
             display: none;
         }
+        fieldset { border:1px solid var(--border-color); border-radius:12px; padding:1rem; }
+        legend { padding:0 .4rem; color:var(--text-muted); font-weight:600; }
+        .target-grid { display:flex; flex-wrap:wrap; gap:1rem; }
+        .target-option { display:flex; justify-content:flex-start; gap:.5rem; align-items:center; margin:0; cursor:pointer; }
+        .target-option input { width:18px; height:18px; accent-color:var(--primary-color); }
+        .settings-row + .settings-row { margin-top:1rem; }
+        .inactive { opacity:.5; }
+        .selection-note { margin-top:.75rem; color:var(--text-muted); font-size:.8rem; line-height:1.5; }
+        .result-group { margin-top:1rem; padding:.85rem; border:1px solid var(--border-color); border-radius:10px; }
+        .result-group h3 { font-size:.95rem; overflow-wrap:anywhere; }
+        .result-url, .output-status { margin-top:.4rem; font-size:.8rem; color:var(--text-muted); overflow-wrap:anywhere; }
+        .result-group .file-link { margin-top:.65rem; }
+        .status-container.partial { border-color:#f59e0b; }
     </style>
 </head>
 
@@ -320,28 +333,38 @@
             <input type="text" class="url-input" placeholder="10. https://youtu.be/..." autocomplete="off">
         </div>
 
-        <div class="form-group">
-            <label for="formatSelect">다운로드 형식</label>
-            <select id="formatSelect" onchange="updateFormatOptions()">
-                <option value="mp3">MP3 (호환성 최우선)</option>
-                <option value="m4a">M4A (애플 기기 최적화)</option>
-                <option value="opus">Opus (최고 효율 및 음질)</option>
-                <option value="mp4">MP4 영상 (영상 + 음성)</option>
-            </select>
-        </div>
-        <div class="form-group" id="videoOptions" hidden>
-            <label for="qualitySelect">영상 최대 화질</label>
-            <select id="qualitySelect">
-                <option value="480">최대 480p (작은 파일)</option>
-                <option value="720">최대 720p (HD)</option>
-                <option value="1080" selected>최대 1080p (Full HD)</option>
-            </select>
-            <p style="margin-top:0.5rem; font-size:0.8rem; color:var(--text-muted);">원본에서 제공하는 화질 중 선택한 최대 화질 이하로 저장합니다. 영상과 음성이 함께 포함됩니다.</p>
-        </div>
+        <fieldset class="form-group">
+            <legend>다운로드 대상</legend>
+            <div class="target-grid">
+                <label class="target-option"><input id="audioTarget" type="checkbox" checked> 오디오 파일</label>
+                <label class="target-option"><input id="videoTarget" type="checkbox"> 영상 파일 (MP4·음성 포함)</label>
+            </div>
+            <p id="selectionHint" class="selection-note" role="status">오디오 또는 영상을 선택하세요. 둘 다 선택할 수 있습니다.</p>
+        </fieldset>
+        <fieldset class="form-group">
+            <legend>설정</legend>
+            <div class="settings-row" id="audioSettings">
+                <label for="audioFormat">오디오 형식</label>
+                <select id="audioFormat">
+                    <option value="mp3">MP3 (호환성 최우선)</option>
+                    <option value="m4a">M4A (애플 기기 최적화)</option>
+                    <option value="opus">Opus (최고 효율 및 음질)</option>
+                </select>
+            </div>
+            <div class="settings-row inactive" id="videoSettings">
+                <label for="videoQuality">영상 최대 화질</label>
+                <select id="videoQuality" disabled>
+                    <option value="480">최대 480p (작은 파일)</option>
+                    <option value="720">최대 720p (HD)</option>
+                    <option value="1080" selected>최대 1080p (Full HD)</option>
+                </select>
+            </div>
+            <p class="selection-note">영상에는 항상 소리가 포함됩니다. 오디오 선택은 별도 음원 파일을 만드는 옵션입니다. 원본보다 높은 화질로 확대하지 않습니다.</p>
+        </fieldset>
 
         <button id="downloadBtn" class="btn" onclick="startDownload()">
             <div class="spinner"></div>
-            <span>순차 다운로드 시작</span>
+            <span>선택한 파일 다운로드</span>
         </button>
 
         <div class="status-container" id="statusContainer">
@@ -374,173 +397,7 @@
     </div>
 
     <script>
-        let ws = null;
-        let completed = false;
-
-        function updateFormatOptions() {
-            document.getElementById('videoOptions').hidden = document.getElementById('formatSelect').value !== 'mp4';
-        }
-
-        async function checkUpdate() {
-            const button = document.getElementById('updateBtn');
-            const status = document.getElementById('updateStatus');
-            button.disabled = true;
-            status.textContent = '최신 버전을 확인하고 있습니다...';
-            try {
-                const response = await fetch('/api/update');
-                if (!response.ok) throw new Error('update failed');
-                const result = await response.json();
-                status.textContent = result.available
-                    ? `새 버전 v${result.latest_version}이 있습니다. Windows 설치 파일을 받아 실행하세요.`
-                    : result.message || `현재 v${result.current_version} · 최신 버전입니다.`;
-            } catch (_) {
-                status.textContent = '업데이트를 확인할 수 없습니다. 다운로드 / 업데이트 링크를 이용하세요.';
-            } finally {
-                button.disabled = false;
-            }
-        }
-
-        function startDownload() {
-            const inputs = document.querySelectorAll('.url-input');
-            const urls = Array.from(inputs).map(input => input.value.trim()).filter(val => val !== "");
-
-            if (urls.length === 0) {
-                appendLog("ERROR: 최소 한 개의 YouTube URL을 입력해주세요.", "error");
-                inputs[0].focus();
-                return;
-            }
-
-            const formatSelect = document.getElementById('formatSelect');
-            const downloadBtn = document.getElementById('downloadBtn');
-            const statusContainer = document.getElementById('statusContainer');
-            const downloadLinks = document.getElementById('downloadLinks');
-
-            // UI 잠금
-            inputs.forEach(input => input.disabled = true);
-            formatSelect.disabled = true;
-            document.getElementById('qualitySelect').disabled = true;
-            downloadBtn.disabled = true;
-            downloadBtn.classList.add('loading');
-
-            clearLogs();
-            downloadLinks.innerHTML = '';
-            downloadLinks.classList.remove('has-items');
-            document.getElementById('localAppFallback').hidden = true;
-            updateContainerStatus('active', "처리 중...");
-
-            // 웹소켓 연결 (https 배포 시 wss 사용)
-            const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-            const wsUrl = `${protocol}//${window.location.host}/ws/download`;
-            ws = new WebSocket(wsUrl);
-            completed = false;
-
-            ws.onopen = () => {
-                ws.send(JSON.stringify({
-                    urls: urls,
-                    format: formatSelect.value,
-                    quality: document.getElementById('qualitySelect').value
-                }));
-            };
-
-            ws.onmessage = (event) => {
-                const msg = event.data;
-
-                if (msg.startsWith("FILE_READY:")) {
-                    // 서버 추출 완료된 파일을 클라이언트로 다운로드 할 수 있게 링크 생성
-                    const parts = msg.split(":");
-                    const encodedName = parts[1];
-                    const displayName = parts.slice(2).join(":"); // 파일명 내의 : 처리
-                    addDownloadLink(encodedName, displayName);
-                }
-                else if (msg.startsWith("PROGRESS:") || msg.startsWith("INFO:")) {
-                    appendLog(msg, 'active');
-                } else if (msg.startsWith("SUCCESS:")) {
-                    appendLog(msg.replace("SUCCESS:", "✅ 성공:"), 'success');
-                    updateContainerStatus('success', "작업 완료");
-                    completed = true;
-                } else if (msg.startsWith("ERROR:")) {
-                    if (msg.includes('[YOUTUBE_AUTH_REQUIRED]')) {
-                        document.getElementById('localAppFallback').hidden = false;
-                    }
-                    appendLog(msg.replace('[YOUTUBE_AUTH_REQUIRED]', '').replace("ERROR:", "❌ 오류:"), 'error');
-                    updateContainerStatus('error', "에러 발생");
-                } else {
-                    appendLog(msg, 'active');
-                }
-            };
-
-            ws.onerror = (error) => {
-                appendLog("❌ 서버와의 연결이 끊어지거나 연결할 수 없습니다.", 'error');
-                updateContainerStatus('error', "연결 오류");
-                resetUI();
-            };
-
-            ws.onclose = () => {
-                if (!completed && document.getElementById('statusContainer').classList.contains('active')) {
-                    appendLog('ERROR: 작업 완료 전에 연결이 종료되었습니다. 다시 시도하세요.', 'error');
-                    updateContainerStatus('error', '연결 종료');
-                }
-                resetUI();
-            };
-        }
-
-        function appendLog(message, type) {
-            const box = document.getElementById('statusBox');
-            if (box.textContent === "URL을 1개 이상 입력하고 다운로드를 시작하세요.") {
-                box.textContent = "";
-            }
-
-            const line = document.createElement('div');
-            line.textContent = message;
-            if (type === 'error') line.style.color = 'var(--error-color)';
-            if (type === 'success') line.style.color = 'var(--success-color)';
-
-            box.appendChild(line);
-            box.scrollTop = box.scrollHeight; // 자동 스크롤
-        }
-
-        function clearLogs() {
-            document.getElementById('statusBox').textContent = "";
-        }
-
-        function updateContainerStatus(type, text) {
-            const container = document.getElementById('statusContainer');
-            const header = document.getElementById('statusHeaderTitle');
-
-            container.className = 'status-container ' + type;
-            header.textContent = text;
-            if (type === 'success') header.style.color = 'var(--success-color)';
-            else if (type === 'error') header.style.color = 'var(--error-color)';
-            else header.style.color = 'var(--primary-color)';
-        }
-
-        function addDownloadLink(encodedName, displayName) {
-            const linksContainer = document.getElementById('downloadLinks');
-            const fileUrl = `/stream/${encodedName}`;
-
-            // 완료 라벨 표시
-            const div = document.createElement('a');
-            div.className = 'file-link';
-            div.href = fileUrl;
-            div.download = displayName;
-            div.textContent = `✅ ${displayName} · 다운로드`;
-            linksContainer.appendChild(div);
-            linksContainer.classList.add('has-items');
-
-        }
-
-        function resetUI() {
-            const inputs = document.querySelectorAll('.url-input');
-            const formatSelect = document.getElementById('formatSelect');
-            const downloadBtn = document.getElementById('downloadBtn');
-
-            inputs.forEach(input => input.disabled = false);
-            formatSelect.disabled = false;
-            document.getElementById('qualitySelect').disabled = false;
-            downloadBtn.disabled = false;
-            downloadBtn.classList.remove('loading');
-
-        }
+{% include "download-controller.js" %}
     </script>
 </body>
 

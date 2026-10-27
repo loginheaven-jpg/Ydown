@@ -22,7 +22,7 @@ def latest_release():
     with _lock:
         if time.monotonic() < _cache["expires"]:
             return _cache["value"]
-        result = {"version": None, "latest_confirmed": False, "video_available": False, "portable_url": RELEASES_URL,
+        result = {"version": None, "latest_confirmed": False, "video_available": False, "dual_available": False, "portable_url": RELEASES_URL,
                   "installer_url": INSTALLER_URL, "releases_url": RELEASES_URL}
         try:
             request = urllib.request.Request(
@@ -35,6 +35,7 @@ def latest_release():
                 result["version"] = version
                 result["latest_confirmed"] = True
                 result["video_available"] = tuple(map(int, version.split("."))) >= (0, 3, 0)
+                result["dual_available"] = tuple(map(int, version.split("."))) >= (0, 4, 0)
                 zip_name = f"YDown-{version}-windows-x64.zip"
                 if any(asset.get("name") == zip_name for asset in release.get("assets", [])):
                     result["portable_url"] = RELEASES_URL + "/download/" + quote(zip_name)
@@ -49,6 +50,7 @@ def latest_release():
                 if match:
                     version = match.group(1)
                     result.update(version=version, latest_confirmed=True,
+                                  dual_available=tuple(map(int, version.split("."))) >= (0, 4, 0),
                                   video_available=tuple(map(int, version.split("."))) >= (0, 3, 0),
                                   portable_url=RELEASES_URL + f"/download/YDown-{version}-windows-x64.zip")
             except (OSError, ValueError, AttributeError):
@@ -61,6 +63,7 @@ def latest_release():
                 version = record["version"]
                 if re.fullmatch(r"\d+\.\d+\.\d+", version):
                     result.update(version=version,
+                                  dual_available=tuple(map(int, version.split("."))) >= (0, 4, 0),
                                   video_available=tuple(map(int, version.split("."))) >= (0, 3, 0),
                                   portable_url=RELEASES_URL.removesuffix("latest")
                                   + f"download/v{version}/YDown-{version}-windows-x64.zip")

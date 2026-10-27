@@ -60,7 +60,7 @@
         <div>
           <div class="eyebrow">YOUTUBE {% if video_available %}VIDEO &amp; {% endif %}AUDIO, ON YOUR PC</div>
           <h1 id="hero-title">{% if video_available %}영상과 오디오를{% else %}필요한 오디오를{% endif %}<br>내 PC에 간편하게.</h1>
-          <p class="intro">영상 링크를 넣고 다운로드 형식을 선택하세요.<br>{% if video_available %}MP4 영상은 음성과 함께 최대 1080p로 저장하고,<br>{% endif %}MP3·M4A·Opus 음원도 추출할 수 있습니다.<br>한 번에 최대 10개 링크를 차례로 처리합니다.</p>
+          <p class="intro">영상 링크를 넣고 {% if dual_available %}오디오·영상 대상을 체크하세요.{% else %}다운로드 형식을 선택하세요.{% endif %}<br>{% if video_available %}MP4 영상은 음성과 함께 최대 1080p로 저장하고,<br>{% endif %}MP3·M4A·Opus 음원도 추출할 수 있습니다.<br>{% if dual_available %}둘 다 선택하면 음원과 영상을 각각 저장합니다.<br>{% endif %}한 번에 최대 10개 링크를 차례로 처리합니다.</p>
           <div class="formats" aria-label="지원 다운로드 형식">{% if video_available %}<span>MP4</span>{% endif %}<span>MP3</span><span>M4A</span><span>Opus</span></div>
         </div>
         <div class="download">
@@ -76,7 +76,7 @@
         <div class="section-title"><h2 id="how-title">설치부터 저장까지, 세 단계</h2><span>프로그램을 실행하면 브라우저 화면이 열립니다.</span></div>
         <ol>
           <li><span class="number" aria-hidden="true">01</span><h3>다운로드하고 실행</h3><p>설치 파일을 실행한 뒤 YDown을 여세요. ZIP 버전은 전체 압축을 풀고 YDown.exe를 실행하세요.</p></li>
-          <li><span class="number" aria-hidden="true">02</span><h3>다운로드 형식 선택</h3><p>{% if video_available %}YouTube 주소를 넣고 MP4 영상 또는 오디오 형식을 선택하세요. 영상은 최대 480p·720p·1080p 중 선택할 수 있습니다.{% else %}YouTube 주소를 넣고 MP3, M4A, Opus 중 원하는 오디오 형식을 선택하세요.{% endif %}</p></li>
+          <li><span class="number" aria-hidden="true">02</span><h3>{% if dual_available %}대상과 설정 선택{% else %}다운로드 형식 선택{% endif %}</h3><p>{% if dual_available %}오디오·영상 체크박스를 선택하세요. 둘 다 선택할 수 있습니다. 설정에서 오디오 형식과 영상 최대 화질을 따로 고릅니다.{% elif video_available %}YouTube 주소를 넣고 MP4 영상 또는 오디오 형식을 선택하세요. 영상은 최대 480p·720p·1080p 중 선택할 수 있습니다.{% else %}YouTube 주소를 넣고 MP3, M4A, Opus 중 원하는 오디오 형식을 선택하세요.{% endif %}</p></li>
           <li><span class="number" aria-hidden="true">03</span><h3>완료된 파일 저장</h3><p>처리가 끝나면 파일의 다운로드 버튼을 눌러 보관할 폴더에 저장하세요.</p></li>
         </ol>
       </section>

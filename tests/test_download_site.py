@@ -45,6 +45,7 @@ def test_latest_release_metadata_and_cache(monkeypatch):
     result = module.latest_release()
     assert result["version"] == "1.2.3"
     assert result["video_available"] is True
+    assert result["dual_available"] is True
     assert result["portable_url"].endswith("/download/YDown-1.2.3-windows-x64.zip")
     assert module.latest_release() == result
     assert len(calls) == 1
@@ -92,3 +93,13 @@ def test_public_redirect_recovers_version_when_api_is_unavailable(monkeypatch):
     assert result["version"] == "0.3.1"
     assert result["video_available"] is True
     assert result["portable_url"].endswith("/YDown-0.3.1-windows-x64.zip")
+
+
+@pytest.mark.parametrize("version, dual", [("0.3.1", False), ("0.4.0", True)])
+def test_dual_selection_instructions_follow_published_version(monkeypatch, version, dual):
+    monkeypatch.setattr(module, "latest_release", lambda: {
+        "version": version, "video_available": True, "dual_available": dual,
+        "installer_url": module.INSTALLER_URL, "portable_url": module.RELEASES_URL,
+        "releases_url": module.RELEASES_URL})
+    with TestClient(module.app) as client:
+        assert ("둘 다 선택하면 음원과 영상을 각각 저장합니다." in client.get("/").text) is dual
