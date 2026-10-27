@@ -22,7 +22,7 @@ def latest_release():
     with _lock:
         if time.monotonic() < _cache["expires"]:
             return _cache["value"]
-        result = {"version": None, "video_available": False, "portable_url": RELEASES_URL,
+        result = {"version": None, "latest_confirmed": False, "video_available": False, "portable_url": RELEASES_URL,
                   "installer_url": INSTALLER_URL, "releases_url": RELEASES_URL}
         try:
             request = urllib.request.Request(
@@ -33,6 +33,7 @@ def latest_release():
             version = release.get("tag_name", "").removeprefix("v")
             if re.fullmatch(r"\d+\.\d+\.\d+", version):
                 result["version"] = version
+                result["latest_confirmed"] = True
                 result["video_available"] = tuple(map(int, version.split("."))) >= (0, 3, 0)
                 zip_name = f"YDown-{version}-windows-x64.zip"
                 if any(asset.get("name") == zip_name for asset in release.get("assets", [])):
@@ -47,10 +48,23 @@ def latest_release():
                                          + r"tag/v?(\d+\.\d+\.\d+)", response.geturl())
                 if match:
                     version = match.group(1)
-                    result.update(version=version,
+                    result.update(version=version, latest_confirmed=True,
                                   video_available=tuple(map(int, version.split("."))) >= (0, 3, 0),
                                   portable_url=RELEASES_URL + f"/download/YDown-{version}-windows-x64.zip")
             except (OSError, ValueError, AttributeError):
+                pass
+        if not result["version"]:
+            # This record is updated only after the public assets and hashes are verified.
+            # It describes a published release, independently of the source app version.
+            try:
+                record = json.loads((BASE_DIR / "packaging/published-release.json").read_text(encoding="utf-8"))
+                version = record["version"]
+                if re.fullmatch(r"\d+\.\d+\.\d+", version):
+                    result.update(version=version,
+                                  video_available=tuple(map(int, version.split("."))) >= (0, 3, 0),
+                                  portable_url=RELEASES_URL.removesuffix("latest")
+                                  + f"download/v{version}/YDown-{version}-windows-x64.zip")
+            except (OSError, ValueError, KeyError, TypeError):
                 pass
         _cache.update(expires=time.monotonic() + (300 if result["version"] else 30), value=result)
         return result

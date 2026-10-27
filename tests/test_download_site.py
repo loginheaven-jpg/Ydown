@@ -50,16 +50,18 @@ def test_latest_release_metadata_and_cache(monkeypatch):
     assert len(calls) == 1
 
 
-def test_github_unavailable_preserves_latest_download_links(monkeypatch):
+def test_github_unavailable_uses_verified_published_record(monkeypatch):
     def unavailable(*args, **kwargs):
         raise OSError("offline")
     monkeypatch.setattr(module, "_cache", {"expires": 0, "value": None})
     monkeypatch.setattr(module.urllib.request, "urlopen", unavailable)
     result = module.latest_release()
-    assert result["version"] is None
-    assert result["video_available"] is False
+    record = json.loads((module.BASE_DIR / "packaging/published-release.json").read_text())
+    assert result["version"] == record["version"]
+    assert result["video_available"] is True
+    assert result["latest_confirmed"] is False
     assert result["installer_url"] == module.INSTALLER_URL
-    assert result["portable_url"] == module.RELEASES_URL
+    assert result["portable_url"].endswith(f"/YDown-{record['version']}-windows-x64.zip")
 
 
 @pytest.mark.parametrize("version, supports_video", [("0.2.0", False), ("0.3.0", True)])

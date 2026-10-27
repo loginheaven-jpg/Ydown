@@ -64,7 +64,7 @@
           <div class="formats" aria-label="지원 다운로드 형식">{% if video_available %}<span>MP4</span>{% endif %}<span>MP3</span><span>M4A</span><span>Opus</span></div>
         </div>
         <div class="download">
-          <div class="topline"><span class="badge">최신 정식 버전</span>{% if version %}<span>v{{ version }}</span>{% endif %}</div>
+          <div class="topline"><span class="badge">{% if latest_confirmed %}최신 정식 버전{% else %}공개된 정식 버전{% endif %}</span>{% if version %}<span>v{{ version }}</span>{% endif %}</div>
           <h2>Windows용 YDown</h2>
           <p class="requirements">Windows 10 / 11 · 64비트 (x64)</p>
           <a class="primary" href="{{ installer_url }}"><span aria-hidden="true">↓</span> 최신 Windows 버전 다운로드</a>

@@ -59,6 +59,11 @@ Railway 서비스의 `YDOWN_MODE`를 `download-site`로 설정하면 `download_s
 없으며, 기존 `YDOWN_PASSWORD` 설정을 사용하지 않습니다. 설치 파일은 GitHub Releases에서 제공합니다.
 Windows 앱과 기본 Docker 실행은 계속 `app.py`의 추출 기능을 사용합니다.
 
+릴리스 정보는 GitHub API와 공개 릴리스 리다이렉트 순으로 확인합니다. 모두 실패하면
+실제 다운로드·체크섬을 검증한 `packaging/published-release.json`을 사용하고,
+버전을 최신으로 단정하지 않고 "공개된 정식 버전"으로 표시합니다. 설치 파일 버튼은
+항상 GitHub의 최신 정식 릴리스를 가리킵니다. 정식 릴리스의 공개 파일을 검증한 후 이 기록을 갱신합니다.
+
 사이트를 로컬에서 확인하려면:
 
 ```powershell
